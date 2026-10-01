@@ -1,0 +1,45 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Node / frontend ---
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+
+# --- Env / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Model weights (never commit real weights) ---
+*.pt
+*.pth
+*.onnx
+Backend/yolov8n/
+Backend/weights/*
+!Backend/weights/README.md
+
+# --- App data (DATA_ROOT) ---
+DATA_ROOT/
+Backend/data/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
