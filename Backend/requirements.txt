@@ -5,29 +5,69 @@ pydantic==2.13.5
 pydantic-settings==2.15.0
 slowapi==0.1.10
 python-json-logger==4.2.0
+sqlalchemy==2.1.3
+pyodbc==5.3.0
+alembic==1.20.0
+python-multipart==0.0.32
+pillow==12.3.0
+numpy==2.4.6
+opencv-python==5.0.0.93
+ultralytics==8.4.173
+segmentation-models-pytorch==0.5.0
 
-# torch + ultralytics are added in Phase 4. torch is NOT pinned here — install
-# it per README with the command matching this machine (CPU build; no CUDA
-# GPU present). sqlalchemy/pyodbc/alembic land in Phase 2, pillow in Phase 3.
+# torch + torchvision are NOT pinned here — they are machine-specific. Install
+# them FIRST, before this file, with the build matching the machine:
+#   CPU only (this laptop, no CUDA GPU):
+#     pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+#   NVIDIA GPU: use the command from https://pytorch.org/get-started/locally/
+# Versions this project was developed with: torch 2.14.1+cpu, torchvision 0.29.1+cpu.
+# (torch's own helpers — filelock, fsspec, jinja2, mpmath, networkx, sympy — arrive with it.)
 
 # Transitive dependencies (pinned for reproducible installs)
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
+certifi==2026.7.22
+charset-normalizer==3.5.2
 click==8.5.0
+contourpy==1.3.3
+cycler==0.12.1
 Deprecated==1.3.1
+fonttools==4.66.1
 h11==0.16.0
+hf-xet==1.6.0
+httpcore==1.0.9
 httptools==0.8.0
+httpx==0.28.1
+huggingface_hub==2.1.1
 idna==3.20
+kiwisolver==1.5.1
 limits==5.8.0
+Mako==1.4.3
+MarkupSafe==3.0.4
+matplotlib==3.11.2
+nvidia-ml-py==13.615.71
 opentelemetry-api==1.45.0
 packaging==26.3
+polars==1.44.2
+polars-runtime-32==1.44.2
+psutil==7.2.2
 pydantic_core==2.46.5
+pyparsing==3.3.3
+python-dateutil==2.9.0.post0
 python-dotenv==1.2.4
 PyYAML==6.0.3
+requests==2.34.2
+safetensors==0.8.0
+six==1.17.0
 starlette==1.7.0
+timm==1.0.30
+tqdm==4.70.1
 typing-inspection==0.4.4
 typing_extensions==4.16.0
+ultralytics-platform==0.1.79
+ultralytics-thop==2.2.2
+urllib3==2.8.0
 watchfiles==1.3.0
 websockets==17.1
 wrapt==2.5.0
