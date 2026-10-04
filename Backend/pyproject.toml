@@ -36,7 +36,10 @@ disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+# The default run is fast and hermetic: tests needing a real SQL Server or real
+# weights are deselected. `pytest -m "mssql or model"` overrides this (the last
+# -m on the command line wins over the one in addopts).
+addopts = "-ra --strict-markers -m 'not mssql and not model'"
 markers = [
     "mssql: requires a real SQL Server instance (KeraAI_Test) and applies Alembic migrations",
     "model: requires real model weights on disk",

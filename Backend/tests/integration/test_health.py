@@ -10,8 +10,13 @@ def test_health_is_ok(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_health_ready_with_no_checks_registered(client: TestClient) -> None:
-    response = client.get("/health/ready")
+def test_health_ready_with_no_checks_registered(app: FastAPI) -> None:
+    # Since Phase 2 the lifespan registers a `database` check on its own, so to
+    # exercise the endpoint's "nothing registered" branch we clear it after startup.
+    with TestClient(app) as client:
+        app.state.readiness_checks = {}
+        response = client.get("/health/ready")
+
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "components": {}}
 
