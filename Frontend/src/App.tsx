@@ -28,7 +28,6 @@ export default function App() {
 
 function AppShell() {
   const [currentTab, setCurrentTab] = useState<ViewTab>('home');
-  const [selectedLeafIdx, setSelectedLeafIdx] = useState<number>(0);
 
   const handleNavigate = (tab: ViewTab) => {
     setCurrentTab(tab);
@@ -53,10 +52,7 @@ function AppShell() {
         )}
 
         {(currentTab === 'detect-disease' || currentTab === 'leaf-detect') && (
-          <DetectDiseaseView
-            onNavigate={handleNavigate}
-            selectedDiagnosisIndex={selectedLeafIdx}
-          />
+          <DetectDiseaseView onNavigate={handleNavigate} />
         )}
 
         {(currentTab === 'leaf-analysis' || currentTab === 'leaf-result') && (
@@ -64,13 +60,7 @@ function AppShell() {
         )}
 
         {(currentTab === 'history' || currentTab === 'analysis-history') && (
-          <AnalysisHistoryView
-            onNavigate={handleNavigate}
-            onSelectAnalysis={(idx) => {
-              setSelectedLeafIdx(idx);
-              handleNavigate('detect-disease');
-            }}
-          />
+          <AnalysisHistoryView onNavigate={handleNavigate} />
         )}
 
         {(currentTab === 'about' || currentTab === 'about-models') && (
