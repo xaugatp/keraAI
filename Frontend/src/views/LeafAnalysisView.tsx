@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { ViewTab, Stage2Diagnosis } from '../types';
 import { sampleDiagnoses, ASSETS } from '../data/mockData';
 import { CameraModal } from '../components/CameraModal';
 import { ProcessingModal } from '../components/ProcessingModal';
+import type { ProcessingPhase } from '../components/ProcessingModal';
 
 interface LeafAnalysisViewProps {
   onNavigate: (tab: ViewTab) => void;
@@ -14,9 +15,31 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
   selectedDiagnosisIndex = 0,
 }) => {
   const [currentIdx, setCurrentIdx] = useState<number>(selectedDiagnosisIndex);
+  // NOTE: still a mock-data stub (F3 wires this view to the real Model 2 result). This state
+  // holds an object URL for whatever photo the user picked, just to keep the preview working.
   const [customLeafImage, setCustomLeafImage] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingPhase, setProcessingPhase] = useState<ProcessingPhase>('idle');
+
+  // Release the previous preview's object URL whenever it changes, and on unmount.
+  useEffect(() => {
+    return () => {
+      if (customLeafImage) URL.revokeObjectURL(customLeafImage);
+    };
+  }, [customLeafImage]);
+
+  // This view is not yet wired to the real backend (F3); simulate the same brief "analysing"
+  // delay the old timer-driven ProcessingModal used to provide internally.
+  useEffect(() => {
+    if (!isProcessing) {
+      setProcessingPhase('idle');
+      return;
+    }
+    setProcessingPhase('analysing');
+    const timer = setTimeout(() => setIsProcessing(false), 1200);
+    return () => clearTimeout(timer);
+  }, [isProcessing]);
 
   // Segmentation Studio Modes: 'overlay' | 'healthy-only' | 'unhealthy-only' | 'original'
   const [viewMode, setViewMode] = useState<'overlay' | 'healthy-only' | 'unhealthy-only' | 'original'>('overlay');
@@ -49,8 +72,8 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
     isDraggingRef.current = false;
   };
 
-  const handleCustomCapture = (imgDataUrl: string) => {
-    setCustomLeafImage(imgDataUrl);
+  const handleCustomCapture = (file: File, _capturedAt: string) => {
+    setCustomLeafImage(URL.createObjectURL(file));
     setIsProcessing(true);
   };
 
@@ -99,11 +122,11 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
         onChange={handleFileUpload}
       />
 
-      {/* Processing Animation Modal */}
+      {/* Processing Animation Modal (still a timed stub here; F3 wires the real Model 2 call) */}
       <ProcessingModal
-        isOpen={isProcessing}
-        mode="leaf"
-        onComplete={() => setIsProcessing(false)}
+        open={isProcessing}
+        phase={processingPhase}
+        onCancel={() => setIsProcessing(false)}
       />
 
       {/* Header */}

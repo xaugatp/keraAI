@@ -1,4 +1,4 @@
-import { Stage1Detection, Stage2Diagnosis } from '../types';
+import { Stage2Diagnosis } from '../types';
 import leafAnalysisSpecimenImg from '../assets/images/banana_leaf_analysis_1790753633840.jpg';
 
 export const ASSETS = {
@@ -10,41 +10,6 @@ export const ASSETS = {
   healthyLeafControl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuChmrE0oLdUJj4jrSHq4z7WI-4eXCusjIjZsiF-Gh-BucimvzxARG7DN8ETE9o4BqKZNnfogiYSIxR7yFUHYJsu08ok6kSdaVCUKwRgZ2QV9uhyZDMI4rfuCjZ8ax6zzVSWV8KOe5ahspceTrogCjGWEdV9sQjSfM5Vkal8IgSZt1hvlheIYZqi5chMNOE2nMRymOOlp9s5y1OKJHSwPbAMAehQzt_U2wmfgcI2ARIAmEmrjMGvaauk',
   negativeHouseplant: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBkhi7GQCKLsstdaYmyF-TYeebRrKrV4GpW6JUECsSDm6oJzFD7qd4v8tftUbP7V7XejUeFekwiZlK7wAo_tRCtFRtLJ6xTDBugCwje6GYXaHNCpN7MKVIEtOrGTT0AfNxcNXMa4OaE3JykJOUwxzXIvoanKpWm5dZhEWUkpLqLd0vWLaTrvPsc6dhTqAV1E9pwXNPOFFaCQsIvk3Q6m99aTYtx3Jp-kwXFQ-MwIVm27bB3ki70AlSf',
   leafAnalysisSpecimen: leafAnalysisSpecimenImg,
-};
-
-export const defaultStage1Data: Stage1Detection = {
-  batchId: '#KER-9924-MUSA',
-  timestamp: 'Today at 10:42:15 AM EST',
-  status: 'valid',
-  targetFound: true,
-  species: 'Musa acuminata',
-  family: 'Family Musaceae • Commercial / Wild Diploid Profile',
-  confidence: 94.7,
-  boundingBox: { x: 124, y: 88, w: 740, h: 960 },
-  resolution: '1920 × 1440 px',
-  colorSpace: 'sRGB (Gamma 2.2)',
-  foliageDensity: 'Dense / Clustered',
-  pseudostemIntegrity: 88.4,
-  luminanceBalance: 0.84,
-  distribution: [
-    { className: 'Banana Tree (Musa spp.)', probability: 94.7, color: 'bg-primary' },
-    { className: 'Palm Tree (Arecaceae)', probability: 3.1, color: 'bg-outline' },
-    { className: 'False Bird of Paradise (Heliconia)', probability: 1.4, color: 'bg-outline' },
-    { className: 'Background / Other Flora', probability: 0.8, color: 'bg-outline' },
-  ],
-  architecture: {
-    modelName: 'Banana Tree Classification Model',
-    topology: 'ResNet50-Musa-v2',
-    latencyMs: 420,
-    hardware: 'NVIDIA T4 Tensor Core',
-    endpoint: 'POST /api/v1/models/tree-classifier/predict',
-  },
-  rejectionReason: 'The uploaded specimen does not meet Musa structural criteria. Foliar paddle morphology missing.',
-  rejectionDistribution: [
-    { className: 'Detected Generic Houseplant', probability: 63.1, color: 'bg-outline' },
-    { className: 'Background / Furniture Texture', probability: 28.2, color: 'bg-outline' },
-    { className: 'Target Class (Banana Tree)', probability: 4.2, color: 'bg-error' },
-  ],
 };
 
 export const sampleDiagnoses: Stage2Diagnosis[] = [

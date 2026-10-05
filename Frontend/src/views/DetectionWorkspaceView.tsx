@@ -1,187 +1,234 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ViewTab } from '../types';
 import { ASSETS } from '../data/mockData';
 import { CameraModal } from '../components/CameraModal';
 import { ProcessingModal } from '../components/ProcessingModal';
+import type { ProcessingPhase } from '../components/ProcessingModal';
+import { useAnalysisState } from '../state/AnalysisContext';
+import { useGeolocation } from '../hooks/useGeolocation';
+import { useSamples } from '../hooks/useSamples';
+import {
+  ACCEPTED_IMAGE_TYPES,
+  AbortedError,
+  ApiError,
+  NetworkError,
+  absoluteImageUrl,
+  getAnalysis,
+  predict,
+  resolveCapturedAt,
+  userMessageFor,
+  validateImageFile,
+} from '../api';
+import type { AnalysisSummary, UploadSource } from '../api';
 
 interface DetectionWorkspaceViewProps {
   onNavigate: (tab: ViewTab) => void;
-  onSelectSample?: (sampleType: 'positive' | 'negative' | 'custom', customImg?: string) => void;
-  onGpsChange?: (coords: { latitude: number; longitude: number; accuracy?: number | null }) => void;
 }
 
-export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({
-  onNavigate,
-  onSelectSample,
-  onGpsChange,
-}) => {
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const nativeCameraInputRef = useRef<HTMLInputElement | null>(null);
+export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({ onNavigate }) => {
+  const { setFile, setTree } = useAnalysisState();
+  const geo = useGeolocation();
+  const { samples, loading: samplesLoading } = useSamples('tree_classification');
 
-  // Field GPS Geolocation state
-  const [gpsLocation, setGpsLocation] = useState<{
-    latitude: number;
-    longitude: number;
-    accuracy: number | null;
-    timestamp: string;
-    status: 'idle' | 'locating' | 'acquired' | 'error';
-    errorMessage?: string;
-  }>({
-    latitude: 27.71724,
-    longitude: 85.32402,
-    accuracy: 4.2,
-    timestamp: 'Field Block 4A',
-    status: 'acquired',
-  });
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // The photo currently selected/captured, kept around so "Retry" can re-submit it unchanged.
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingSource, setPendingSource] = useState<UploadSource | null>(null);
+  const [pendingCapturedAt, setPendingCapturedAt] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const [phase, setPhase] = useState<ProcessingPhase>('idle');
+  const [progress, setProgress] = useState<number | undefined>(undefined);
+  const [submitError, setSubmitError] = useState<ApiError | NetworkError | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const [pageError, setPageError] = useState<string | null>(null);
+
+  // Manual GPS entry, if the owner prefers to type coordinates instead of using the device fix.
+  const [manualOverride, setManualOverride] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isEditingGps, setIsEditingGps] = useState(false);
-  const [customLat, setCustomLat] = useState('27.717240');
-  const [customLng, setCustomLng] = useState('85.324020');
+  const [manualLat, setManualLat] = useState('');
+  const [manualLng, setManualLng] = useState('');
+  const [manualError, setManualError] = useState<string | null>(null);
+
+  // Release the object URL of the previously selected photo whenever it changes, and on unmount.
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   useEffect(() => {
-    // Attempt auto-acquisition of coordinates if available
-    acquireCurrentLocation(false);
+    return () => {
+      abortControllerRef.current?.abort();
+    };
   }, []);
 
-  const acquireCurrentLocation = (explicitClick = true) => {
-    if (!navigator.geolocation) {
-      if (explicitClick) {
-        setGpsLocation((prev) => ({
-          ...prev,
-          status: 'error',
-          errorMessage: 'Geolocation is not supported by your browser',
-        }));
-      }
-      return;
-    }
+  // Manual entry wins once set; requesting a fresh device fix drops it again.
+  const location = manualOverride
+    ? { latitude: manualOverride.latitude, longitude: manualOverride.longitude, accuracyM: null as number | null, capturedAt: null as Date | null }
+    : geo.position
+      ? { latitude: geo.position.latitude, longitude: geo.position.longitude, accuracyM: geo.position.accuracyM, capturedAt: geo.position.capturedAt }
+      : null;
 
-    setGpsLocation((prev) => ({ ...prev, status: 'locating', errorMessage: undefined }));
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = Number(position.coords.latitude.toFixed(6));
-        const lng = Number(position.coords.longitude.toFixed(6));
-        const acc = position.coords.accuracy ? Number(position.coords.accuracy.toFixed(1)) : null;
-        setGpsLocation({
-          latitude: lat,
-          longitude: lng,
-          accuracy: acc,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: 'acquired',
-        });
-        setCustomLat(lat.toString());
-        setCustomLng(lng.toString());
-        onGpsChange?.({ latitude: lat, longitude: lng, accuracy: acc });
-      },
-      (error) => {
-        let msg = 'Unable to retrieve location';
-        if (error.code === error.PERMISSION_DENIED) {
-          msg = 'Location permission not granted. Using plantation default.';
-        } else if (error.code === error.POSITION_UNAVAILABLE) {
-          msg = 'GPS signal unavailable. Using plantation default.';
-        } else if (error.code === error.TIMEOUT) {
-          msg = 'Location timed out. Using plantation default.';
-        }
-        setGpsLocation((prev) => ({
-          ...prev,
-          status: prev.status === 'acquired' ? 'acquired' : 'error',
-          errorMessage: explicitClick ? msg : undefined,
-        }));
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 8000,
-        maximumAge: 30000,
-      }
-    );
+  const handleUseMyLocation = () => {
+    setManualOverride(null);
+    setIsEditingGps(false);
+    geo.request();
   };
 
   const handleManualGpsSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const lat = parseFloat(customLat);
-    const lng = parseFloat(customLng);
-    if (!isNaN(lat) && !isNaN(lng)) {
-      setGpsLocation({
-        latitude: lat,
-        longitude: lng,
-        accuracy: null,
-        timestamp: 'Manual Tag',
-        status: 'acquired',
+    const lat = Number.parseFloat(manualLat);
+    const lng = Number.parseFloat(manualLng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      setManualError('Enter a valid latitude (-90 to 90) and longitude (-180 to 180).');
+      return;
+    }
+    setManualError(null);
+    setManualOverride({ latitude: lat, longitude: lng });
+    setIsEditingGps(false);
+  };
+
+  const submit = useCallback(
+    async (file: File, source: UploadSource, cameraCapturedAt: string | null) => {
+      setSubmitError(null);
+      setPhase('preparing');
+      setProgress(undefined);
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      const capturedAt = resolveCapturedAt({
+        cameraCapturedAt,
+        gpsCapturedAt: location?.capturedAt ?? null,
       });
-      onGpsChange?.({ latitude: lat, longitude: lng, accuracy: null });
-      setIsEditingGps(false);
-    }
-  };
 
-  const startAnalysis = (sampleType: 'positive' | 'negative' | 'custom', customImg?: string) => {
-    onSelectSample?.(sampleType, customImg);
-    setIsProcessing(true);
-  };
+      try {
+        const detail = await predict(
+          'tree_classification',
+          {
+            file,
+            source,
+            latitude: location?.latitude ?? null,
+            longitude: location?.longitude ?? null,
+            accuracyM: location?.accuracyM ?? null,
+            capturedAt,
+          },
+          {
+            signal: controller.signal,
+            onProgress: (p) => {
+              if (p.phase === 'uploading') {
+                setPhase('uploading');
+                setProgress(p.percent);
+              } else {
+                setPhase('analysing');
+                setProgress(undefined);
+              }
+            },
+          },
+        );
+        setPhase('done');
+        setFile(file);
+        setTree(detail);
+        onNavigate('stage1-result');
+      } catch (error) {
+        if (error instanceof AbortedError) {
+          setPhase('idle');
+          return;
+        }
+        setSubmitError(error as ApiError | NetworkError);
+        setPhase('error');
+      } finally {
+        abortControllerRef.current = null;
+      }
+    },
+    [location, onNavigate, setFile, setTree],
+  );
 
-  const handleProcessingComplete = () => {
-    setIsProcessing(false);
-    onNavigate('plant-result');
-  };
+  const selectFile = useCallback(
+    (file: File, source: UploadSource, capturedAt: string | null) => {
+      const error = validateImageFile(file);
+      if (error) {
+        setPageError(error);
+        return;
+      }
+      setPageError(null);
+      setPreviewUrl(URL.createObjectURL(file));
+      setPendingFile(file);
+      setPendingSource(source);
+      setPendingCapturedAt(capturedAt);
+      void submit(file, source, capturedAt);
+    },
+    [submit],
+  );
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const isSuspectedNegative =
-        file.name.toLowerCase().includes('succulent') ||
-        file.name.toLowerCase().includes('houseplant') ||
-        file.name.toLowerCase().includes('negative');
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        startAnalysis(isSuspectedNegative ? 'negative' : 'custom', event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+    e.target.value = ''; // allow re-selecting the same file
+    if (file) selectFile(file, 'upload', null);
   };
 
-  const handleNativeMobileCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        startAnalysis('positive', event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) selectFile(file, 'upload', null);
   };
+
+  const handleCancel = useCallback(() => {
+    abortControllerRef.current?.abort();
+    setPhase('idle');
+    setSubmitError(null);
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    if (pendingFile && pendingSource) void submit(pendingFile, pendingSource, pendingCapturedAt);
+  }, [pendingFile, pendingSource, pendingCapturedAt, submit]);
+
+  const openSample = useCallback(
+    async (sample: AnalysisSummary) => {
+      setPageError(null);
+      try {
+        const detail = await getAnalysis(sample.id);
+        setFile(null);
+        setTree(detail);
+        onNavigate('stage1-result');
+      } catch (error) {
+        setPageError(userMessageFor(error));
+      }
+    },
+    [onNavigate, setFile, setTree],
+  );
 
   return (
     <div className="w-full max-w-7xl mx-auto px-6 lg:px-12 py-10 flex flex-col gap-8">
-      {/* Hidden Universal Native Camera Input for iPhone & Android */}
-      <input
-        ref={nativeCameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="sr-only"
-        onChange={handleNativeMobileCapture}
-      />
-
       {/* Full-Screen Mobile-Optimized Camera Modal */}
       <CameraModal
         isOpen={isCameraOpen}
         mode="plant"
         fallbackImage={ASSETS.bananaFieldCalib}
         onClose={() => setIsCameraOpen(false)}
-        onCapture={(img) => {
+        onCapture={(file, capturedAt) => {
           setIsCameraOpen(false);
-          startAnalysis('positive', img);
+          selectFile(file, 'camera', capturedAt);
         }}
       />
 
-      {/* Asynchronous Processing Modal with 4-stage checklist */}
+      {/* Real-state Processing Modal: driven by the actual predict() call below. */}
       <ProcessingModal
-        isOpen={isProcessing}
-        mode="plant"
-        onComplete={handleProcessingComplete}
+        open={phase !== 'idle'}
+        phase={phase}
+        progress={progress}
+        error={submitError}
+        onCancel={handleCancel}
+        onRetry={phase === 'error' && pendingFile ? handleRetry : undefined}
       />
 
-      {/* Header - strictly "Plant Detection" as requested */}
+      {/* Header */}
       <header className="flex flex-col gap-2 max-w-3xl">
         <div className="flex items-center gap-2 text-[#3d4a42] text-xs font-semibold tracking-wider uppercase">
           <button
@@ -212,19 +259,20 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({
               <span className="text-xs uppercase font-bold text-[#3d4a42] tracking-wider">
                 Field GPS Coordinates
               </span>
-              {gpsLocation.status === 'locating' ? (
+              {geo.status === 'requesting' ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#eaedff] text-[#006948] font-mono text-[10px] font-bold">
                   <span className="material-symbols-outlined text-[12px] animate-spin">refresh</span>
                   Acquiring...
                 </span>
-              ) : gpsLocation.status === 'acquired' ? (
+              ) : location ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#85f8c4]/40 text-[#006948] font-mono text-[10px] font-bold">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#006948]" />
-                  GPS Locked {gpsLocation.accuracy ? `(±${gpsLocation.accuracy}m)` : ''}
+                  {manualOverride ? 'Manual' : 'GPS Locked'}{' '}
+                  {location.accuracyM != null ? `(±${location.accuracyM.toFixed(1)}m)` : ''}
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffdad6] text-[#ba1a1a] font-mono text-[10px] font-bold">
-                  Fallback Location
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#eaedff] text-[#3d4a42] font-mono text-[10px] font-bold">
+                  No Location Set
                 </span>
               )}
             </div>
@@ -234,15 +282,16 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({
               <div className="flex items-center gap-4 mt-1 font-mono text-xs sm:text-sm">
                 <span className="text-[#131b2e]">
                   <strong className="text-[#3d4a42] font-semibold">Lat:</strong>{' '}
-                  <span className="font-bold text-[#006948]">{gpsLocation.latitude.toFixed(6)}°</span>
+                  <span className="font-bold text-[#006948]">
+                    {location ? `${location.latitude.toFixed(6)}°` : '—'}
+                  </span>
                 </span>
                 <span className="text-[#bccac0]">&bull;</span>
                 <span className="text-[#131b2e]">
                   <strong className="text-[#3d4a42] font-semibold">Long:</strong>{' '}
-                  <span className="font-bold text-[#006948]">{gpsLocation.longitude.toFixed(6)}°</span>
-                </span>
-                <span className="text-xs text-[#3d4a42] hidden lg:inline">
-                  ({gpsLocation.timestamp})
+                  <span className="font-bold text-[#006948]">
+                    {location ? `${location.longitude.toFixed(6)}°` : '—'}
+                  </span>
                 </span>
               </div>
             ) : (
@@ -250,15 +299,15 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({
                 <input
                   type="text"
                   placeholder="Latitude"
-                  value={customLat}
-                  onChange={(e) => setCustomLat(e.target.value)}
+                  value={manualLat}
+                  onChange={(e) => setManualLat(e.target.value)}
                   className="px-2.5 py-1 rounded-lg border border-[#dae2fd] text-xs font-mono w-28 bg-[#f2f3ff]"
                 />
                 <input
                   type="text"
                   placeholder="Longitude"
-                  value={customLng}
-                  onChange={(e) => setCustomLng(e.target.value)}
+                  value={manualLng}
+                  onChange={(e) => setManualLng(e.target.value)}
                   className="px-2.5 py-1 rounded-lg border border-[#dae2fd] text-xs font-mono w-28 bg-[#f2f3ff]"
                 />
                 <button
@@ -277,10 +326,8 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({
               </form>
             )}
 
-            {gpsLocation.errorMessage && (
-              <span className="text-[11px] text-[#ba1a1a] mt-0.5">
-                {gpsLocation.errorMessage}
-              </span>
+            {(manualError || geo.error) && (
+              <span className="text-[11px] text-[#ba1a1a] mt-0.5">{manualError ?? geo.error}</span>
             )}
           </div>
         </div>
@@ -289,21 +336,27 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({
         <div className="flex items-center gap-2 self-end md:self-center">
           <button
             type="button"
-            onClick={() => acquireCurrentLocation(true)}
-            disabled={gpsLocation.status === 'locating'}
+            onClick={handleUseMyLocation}
+            disabled={geo.status === 'requesting'}
             className="px-3 py-1.5 rounded-xl bg-[#eaedff] hover:bg-[#dae2fd] text-[#131b2e] text-xs font-semibold font-mono flex items-center gap-1.5 transition-colors cursor-pointer border border-[#dae2fd]"
-            title="Acquire device GPS coordinates"
+            title="Use this device's current location"
           >
-            <span className={`material-symbols-outlined text-[16px] text-[#006948] ${gpsLocation.status === 'locating' ? 'animate-spin' : ''}`}>
+            <span
+              className={`material-symbols-outlined text-[16px] text-[#006948] ${geo.status === 'requesting' ? 'animate-spin' : ''}`}
+            >
               my_location
             </span>
-            <span>Get Current GPS</span>
+            <span>Use My Location</span>
           </button>
 
           {!isEditingGps && (
             <button
               type="button"
-              onClick={() => setIsEditingGps(true)}
+              onClick={() => {
+                setManualLat(location ? location.latitude.toFixed(6) : '');
+                setManualLng(location ? location.longitude.toFixed(6) : '');
+                setIsEditingGps(true);
+              }}
               className="p-1.5 rounded-xl text-[#3d4a42] hover:bg-[#eaedff] transition-colors cursor-pointer"
               title="Edit Coordinates manually"
             >
@@ -312,6 +365,31 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Selected photo preview (shown for both camera captures and uploads, until the result arrives) */}
+      {previewUrl && (
+        <div className="bg-white p-4 rounded-2xl border border-[#dae2fd] shadow-sm flex items-center gap-4">
+          <img
+            src={previewUrl}
+            alt="Selected specimen preview"
+            className="w-16 h-16 rounded-xl object-cover border border-[#dae2fd] shrink-0"
+          />
+          <div className="flex flex-col flex-1 min-w-0">
+            <span className="text-sm font-semibold text-[#131b2e] truncate">
+              {pendingFile?.name ?? 'Captured photo'}
+            </span>
+            <span className="text-xs text-[#3d4a42]">
+              {pendingSource === 'camera' ? 'From camera' : 'Uploaded file'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {pageError && (
+        <div className="p-3.5 rounded-xl bg-[#ffdad6] border border-[#ba1a1a]/30 text-[#ba1a1a] text-sm">
+          {pageError}
+        </div>
+      )}
 
       {/* Two Large Options (Camera prominent on mobile) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
@@ -405,10 +483,20 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({
               </p>
             </div>
 
-            {/* Dropzone */}
+            {/* Dropzone — real drag-and-drop */}
             <label
               htmlFor="plant-image-upload"
-              className="cursor-pointer flex flex-col items-center justify-center p-8 rounded-xl bg-[#f2f3ff] hover:bg-[#eaedff] border-2 border-dashed border-[#bccac0] hover:border-[#006948] transition-colors text-center relative group"
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragActive(true);
+              }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={handleDrop}
+              className={`cursor-pointer flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed transition-colors text-center relative group ${
+                dragActive
+                  ? 'bg-[#dae2fd] border-[#006948]'
+                  : 'bg-[#f2f3ff] hover:bg-[#eaedff] border-[#bccac0] hover:border-[#006948]'
+              }`}
             >
               <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm text-[#006948] mb-3 border border-[#dae2fd] group-hover:scale-105 transition-transform">
                 <span className="material-symbols-outlined text-[26px]">add_photo_alternate</span>
@@ -421,26 +509,37 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({
                 ref={fileInputRef}
                 id="plant-image-upload"
                 type="file"
-                accept="image/*"
+                accept={ACCEPTED_IMAGE_TYPES.join(',')}
                 className="sr-only"
-                onChange={handleFileUpload}
+                onChange={handleFileInputChange}
               />
             </label>
 
-            {/* Benchmark Samples: 1 example to see */}
+            {/* Real pre-computed samples */}
             <div className="flex flex-col gap-2 mt-1">
               <span className="font-mono text-xs text-[#3d4a42] font-semibold tracking-wide">
-                QUICK BENCHMARK SAMPLE:
+                SAMPLE SPECIMENS:
               </span>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => startAnalysis('positive')}
-                  className="px-3 py-1.5 rounded-lg bg-[#eaedff] hover:bg-[#dae2fd] text-[#131b2e] font-mono text-xs flex items-center gap-1.5 transition-colors border border-[#dae2fd] cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[14px] text-[#006948]">eco</span>
-                  <span>Sample: Banana Tree Specimen</span>
-                </button>
+                {samplesLoading && <span className="text-xs text-[#3d4a42]">Loading samples…</span>}
+                {!samplesLoading && samples.length === 0 && (
+                  <span className="text-xs text-[#3d4a42]">No samples available yet.</span>
+                )}
+                {samples.map((sample) => (
+                  <button
+                    key={sample.id}
+                    type="button"
+                    onClick={() => void openSample(sample)}
+                    className="px-3 py-1.5 rounded-lg bg-[#eaedff] hover:bg-[#dae2fd] text-[#131b2e] font-mono text-xs flex items-center gap-2 transition-colors border border-[#dae2fd] cursor-pointer"
+                  >
+                    <img
+                      src={absoluteImageUrl(sample.thumbnail_url)}
+                      alt=""
+                      className="w-6 h-6 rounded object-cover shrink-0"
+                    />
+                    <span>{sample.title ?? sample.display_label}</span>
+                  </button>
+                ))}
               </div>
             </div>
           </div>

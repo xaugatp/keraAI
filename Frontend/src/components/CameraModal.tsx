@@ -4,9 +4,14 @@ interface CameraModalProps {
   isOpen: boolean;
   mode: 'plant' | 'leaf';
   onClose: () => void;
-  onCapture: (capturedImage: string) => void;
+  /** `capturedAt` is an ISO-8601 timestamp taken at the moment the shutter was pressed. */
+  onCapture: (file: File, capturedAt: string) => void;
+  /** Decorative placeholder shown in the viewfinder before the live stream starts (never captured). */
   fallbackImage: string;
 }
+
+/** `HTMLMediaElement.HAVE_CURRENT_DATA`: the video has at least one real decoded frame to draw. */
+const HAVE_CURRENT_DATA = 2;
 
 export const CameraModal: React.FC<CameraModalProps> = ({
   isOpen,
@@ -31,52 +36,81 @@ export const CameraModal: React.FC<CameraModalProps> = ({
 
   // Hardware Stream State
   const [isLiveStreamActive, setIsLiveStreamActive] = useState<boolean>(false);
-  // The notice text is set below but not rendered yet; F2 (spec §2, CameraModal) will display it.
-  const [, setStreamErrorNotice] = useState<string | null>(null);
+  /** True once the `<video>` has a real decoded frame (readyState >= HAVE_CURRENT_DATA): only then can we capture. */
+  const [videoReady, setVideoReady] = useState<boolean>(false);
+  const [streamErrorNotice, setStreamErrorNotice] = useState<string | null>(null);
+
+  // The captured photo, held as an object URL for preview plus the File/timestamp to hand back.
   const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
+  const [capturedFile, setCapturedFile] = useState<File | null>(null);
+  const [capturedAt, setCapturedAt] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const nativeInputRef = useRef<HTMLInputElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
-  // Play synthetic camera shutter sound via Web Audio API
-  const playSound = (type: 'shutter' | 'focus') => {
+  const closeAudioContext = useCallback(() => {
+    const ctx = audioCtxRef.current;
+    if (ctx && ctx.state !== 'closed') {
+      ctx.close().catch(() => {
+        // nothing useful to do if closing fails
+      });
+    }
+    audioCtxRef.current = null;
+  }, []);
+
+  const getAudioContext = useCallback((): AudioContext | null => {
     try {
       const AudioCtx =
         window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-
-      if (type === 'shutter') {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(800, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.08);
-        gain.gain.setValueAtTime(0.35, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.08);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.09);
-      } else if (type === 'focus') {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(1200, ctx.currentTime);
-        gain.gain.setValueAtTime(0.08, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.005, ctx.currentTime + 0.04);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.05);
+      if (!AudioCtx) return null;
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioCtx();
       }
+      return audioCtxRef.current;
     } catch {
-      // Audio autoplay restrictions safe ignore
+      return null;
     }
-  };
+  }, []);
+
+  // Play synthetic camera shutter sound via Web Audio API (one shared, reusable AudioContext).
+  const playSound = useCallback(
+    (type: 'shutter' | 'focus') => {
+      const ctx = getAudioContext();
+      if (!ctx) return;
+      try {
+        if (type === 'shutter') {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(800, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.35, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.09);
+        } else {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(1200, ctx.currentTime);
+          gain.gain.setValueAtTime(0.08, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.005, ctx.currentTime + 0.04);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.05);
+        }
+      } catch {
+        // Audio autoplay restrictions: safe to ignore.
+      }
+    },
+    [getAudioContext],
+  );
 
   const stopCameraStream = useCallback(() => {
     if (streamRef.current) {
@@ -93,6 +127,7 @@ export const CameraModal: React.FC<CameraModalProps> = ({
       videoRef.current.srcObject = null;
     }
     setIsLiveStreamActive(false);
+    setVideoReady(false);
   }, []);
 
   const startCameraStream = useCallback(async () => {
@@ -100,7 +135,7 @@ export const CameraModal: React.FC<CameraModalProps> = ({
     setStreamErrorNotice(null);
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setStreamErrorNotice('Device WebRTC restricted in preview iframe. Using Interactive Sensor Mode.');
+      setStreamErrorNotice("This browser can't access the camera. Use Upload Image instead.");
       return;
     }
 
@@ -139,11 +174,14 @@ export const CameraModal: React.FC<CameraModalProps> = ({
             setIsLiveStreamActive(true);
           });
         };
+        video.onloadeddata = () => {
+          setVideoReady(true);
+        };
       } else {
-        setStreamErrorNotice('Sensor simulated in studio view');
+        setStreamErrorNotice('Could not start the camera. Use Upload Image instead.');
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'WebRTC unavailable in this browser frame';
+      const msg = err instanceof Error ? err.message : 'The camera is unavailable in this browser.';
       setStreamErrorNotice(msg);
       setIsLiveStreamActive(false);
     }
@@ -152,6 +190,8 @@ export const CameraModal: React.FC<CameraModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setCapturedPreview(null);
+      setCapturedFile(null);
+      setCapturedAt(null);
       setZoomLevel(1);
       setActiveLens('1x');
       setExposureEv(0);
@@ -159,11 +199,22 @@ export const CameraModal: React.FC<CameraModalProps> = ({
     } else {
       stopCameraStream();
       setCapturedPreview(null);
+      setCapturedFile(null);
+      setCapturedAt(null);
+      closeAudioContext();
     }
     return () => {
       stopCameraStream();
+      closeAudioContext();
     };
-  }, [isOpen, startCameraStream, stopCameraStream]);
+  }, [isOpen, startCameraStream, stopCameraStream, closeAudioContext]);
+
+  // Release the previous captured-photo object URL whenever it changes, and on unmount.
+  useEffect(() => {
+    return () => {
+      if (capturedPreview) URL.revokeObjectURL(capturedPreview);
+    };
+  }, [capturedPreview]);
 
   // Handle tap-to-focus interactive animation
   const handleViewportClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -191,93 +242,81 @@ export const CameraModal: React.FC<CameraModalProps> = ({
     playSound('focus');
   };
 
-  // Interactive Shutter Capture
+  // Interactive Shutter Capture: draws the REAL video frame at its native resolution to a canvas,
+  // then encodes it as a JPEG File. No capture is possible until a real frame has arrived
+  // (the shutter button is disabled until then), so there is no "blank navy" or stock-photo
+  // fallback frame to draw.
   const handleCaptureClick = () => {
+    if (!videoReady || !videoRef.current) return;
+    const shutterPressedAt = Date.now();
     setIsFlashOn(true);
     playSound('shutter');
 
     setTimeout(() => {
       setIsFlashOn(false);
 
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 1600;
-        canvas.height = 1200;
-        const ctx = canvas.getContext('2d');
-
-        if (ctx) {
-          // Fill canvas background
-          ctx.fillStyle = '#131b2e';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Apply exposure / brightness
-          const brightnessFactor = 1 + exposureEv * 0.25;
-          ctx.filter = `brightness(${brightnessFactor})`;
-
-          if (isLiveStreamActive && videoRef.current && videoRef.current.readyState >= 2) {
-            const video = videoRef.current;
-            ctx.save();
-            if (isFlipped) {
-              ctx.translate(canvas.width, 0);
-              ctx.scale(-1, 1);
-            }
-            // Scale according to zoomLevel
-            const w = canvas.width * zoomLevel;
-            const h = canvas.height * zoomLevel;
-            const ox = (canvas.width - w) / 2;
-            const oy = (canvas.height - h) / 2;
-            ctx.drawImage(video, ox, oy, w, h);
-            ctx.restore();
-          } else {
-            // High-res image specimen source
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.src = fallbackImage;
-
-            ctx.save();
-            if (isFlipped) {
-              ctx.translate(canvas.width, 0);
-              ctx.scale(-1, 1);
-            }
-            const w = canvas.width * zoomLevel;
-            const h = canvas.height * zoomLevel;
-            const ox = (canvas.width - w) / 2;
-            const oy = (canvas.height - h) / 2;
-            ctx.drawImage(img, ox, oy, w, h);
-            ctx.restore();
-          }
-
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.94);
-          setCapturedPreview(dataUrl);
-          return;
-        }
-      } catch {
-        // Fallback to active specimen image
+      const video = videoRef.current;
+      if (!video || video.readyState < HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) {
+        setStreamErrorNotice('Lost the camera frame before the photo could be captured. Please try again.');
+        return;
       }
 
-      setCapturedPreview(fallbackImage);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('2D canvas context unavailable');
+
+        // Apply exposure / brightness (cosmetic, matches the live preview's filter).
+        const brightnessFactor = 1 + exposureEv * 0.25;
+        ctx.filter = `brightness(${brightnessFactor})`;
+
+        ctx.save();
+        if (isFlipped) {
+          ctx.translate(canvas.width, 0);
+          ctx.scale(-1, 1);
+        }
+        // Cosmetic zoom: crop/scale the drawn frame, same as the live preview.
+        const w = canvas.width * zoomLevel;
+        const h = canvas.height * zoomLevel;
+        const ox = (canvas.width - w) / 2;
+        const oy = (canvas.height - h) / 2;
+        ctx.drawImage(video, ox, oy, w, h);
+        ctx.restore();
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              setStreamErrorNotice("Couldn't capture a photo from the camera. Please try again.");
+              return;
+            }
+            const iso = new Date(shutterPressedAt).toISOString();
+            const file = new File([blob], `camera-capture-${shutterPressedAt}.jpg`, { type: 'image/jpeg' });
+            setCapturedFile(file);
+            setCapturedAt(iso);
+            setCapturedPreview(URL.createObjectURL(blob));
+          },
+          'image/jpeg',
+          0.92,
+        );
+      } catch {
+        setStreamErrorNotice("Couldn't capture a photo from the camera. Please try again.");
+      }
     }, 120);
   };
 
-  // Direct Native Mobile Camera launcher
-  const handleNativeCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setCapturedPreview(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+  const confirmCapturedPhoto = () => {
+    if (capturedFile && capturedAt) {
+      onCapture(capturedFile, capturedAt);
+      onClose();
     }
   };
 
-  const confirmCapturedPhoto = () => {
-    if (capturedPreview) {
-      onCapture(capturedPreview);
-      onClose();
-    }
+  const retakePhoto = () => {
+    setCapturedPreview(null);
+    setCapturedFile(null);
+    setCapturedAt(null);
   };
 
   if (!isOpen) return null;
@@ -304,7 +343,7 @@ export const CameraModal: React.FC<CameraModalProps> = ({
               <span>{mode === 'plant' ? 'Banana Plant Viewfinder' : 'Leaf Macro Diagnostic Camera'}</span>
             </span>
             <span className="text-[10px] font-mono text-[#85f8c4]">
-              {isLiveStreamActive ? 'Live Sensor Feed' : 'Calibrated Macro Sensor'} &bull; 60 FPS
+              {isLiveStreamActive ? 'Live Sensor Feed' : 'Calibrated Macro Sensor'}
             </span>
           </div>
         </div>
@@ -335,21 +374,11 @@ export const CameraModal: React.FC<CameraModalProps> = ({
         </div>
       </div>
 
-      {/* Hidden Native Phone Camera File Input */}
-      <input
-        ref={nativeInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="sr-only"
-        onChange={handleNativeCameraCapture}
-      />
-
       {/* 2. CENTER VIEWFINDER VIEWPORT */}
       <div
         ref={viewportRef}
         onClick={handleViewportClick}
-        className="relative w-full max-w-5xl flex-1 max-h-[74vh] rounded-3xl overflow-hidden bg-black flex items-center justify-center border-2 border-white/20 shadow-2xl cursor-crosshair group select-none"
+        className="relative w-full max-w-5xl flex-1 max-h-[74dvh] rounded-3xl overflow-hidden bg-black flex items-center justify-center border-2 border-white/20 shadow-2xl cursor-crosshair group select-none"
       >
         {/* Shutter Flash Effect */}
         {isFlashOn && (
@@ -371,11 +400,11 @@ export const CameraModal: React.FC<CameraModalProps> = ({
           }}
         />
 
-        {/* High-Resolution Interactive Calibrated Specimen (when stream is not active or as preview) */}
+        {/* Placeholder specimen graphic (not a capture source) while the stream isn't live, or the frozen capture preview. */}
         {(!isLiveStreamActive || capturedPreview) && (
           <div className="relative w-full h-full flex items-center justify-center bg-[#090d16] overflow-hidden">
             <img
-              alt="Interactive camera viewfinder specimen"
+              alt={capturedPreview ? 'Captured specimen preview' : 'Camera viewfinder placeholder'}
               src={capturedPreview || fallbackImage}
               className={`w-full h-full object-cover transition-all duration-300 pointer-events-none ${
                 capturedPreview ? 'object-contain' : ''
@@ -388,12 +417,19 @@ export const CameraModal: React.FC<CameraModalProps> = ({
           </div>
         )}
 
-        {/* Review Snapshot Confirmation Banner */}
+        {/* Review Snapshot Confirmation Banner / Stream Error Notice / Live Hint */}
         {capturedPreview ? (
           <div className="absolute top-5 left-5 bg-black/85 backdrop-blur-md px-4 py-2 rounded-2xl border border-[#85f8c4]/60 text-white font-mono text-xs flex items-center gap-2.5 shadow-xl animate-fade-in z-40">
             <span className="w-2.5 h-2.5 rounded-full bg-[#85f8c4] animate-pulse" />
             <span className="font-bold text-white">Specimen Frame Frozen</span>
             <span className="text-[#85f8c4]">&bull; Ready for Diagnostics</span>
+          </div>
+        ) : streamErrorNotice ? (
+          <div className="absolute top-4 inset-x-0 flex justify-center pointer-events-none z-30 px-4">
+            <div className="bg-[#ba1a1a]/90 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/30 text-white font-mono text-xs flex items-center gap-2 shadow-xl max-w-md text-center">
+              <span className="material-symbols-outlined text-[16px]">warning</span>
+              <span>{streamErrorNotice}</span>
+            </div>
           </div>
         ) : (
           /* Live Sensor Indicator Badge (Non-blocking, sleek, interactive) */
@@ -481,7 +517,7 @@ export const CameraModal: React.FC<CameraModalProps> = ({
           <div className="w-full flex items-center justify-center gap-4 flex-wrap">
             <button
               type="button"
-              onClick={() => setCapturedPreview(null)}
+              onClick={retakePhoto}
               className="px-6 py-3 rounded-2xl bg-white/15 hover:bg-white/25 text-white font-semibold text-sm transition-all flex items-center gap-2 border border-white/20 cursor-pointer active:scale-95 shadow-md"
             >
               <span className="material-symbols-outlined text-[20px]">refresh</span>
@@ -523,10 +559,13 @@ export const CameraModal: React.FC<CameraModalProps> = ({
               <button
                 type="button"
                 onClick={handleCaptureClick}
-                className="relative group p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all cursor-pointer active:scale-90"
-                title="Capture Specimen Image"
+                disabled={!videoReady}
+                title={videoReady ? 'Capture Specimen Image' : 'Waiting for the camera…'}
+                className="relative group p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all cursor-pointer active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
               >
-                <span className="absolute inset-0 rounded-full bg-[#85f8c4] opacity-40 animate-ping pointer-events-none" />
+                {videoReady && (
+                  <span className="absolute inset-0 rounded-full bg-[#85f8c4] opacity-40 animate-ping pointer-events-none" />
+                )}
                 <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full bg-gradient-to-tr from-[#006948] to-[#00855d] flex items-center justify-center text-white shadow-[0_0_24px_rgba(0,105,72,0.6)] group-hover:scale-105 transition-transform border-4 border-white">
                   <span className="material-symbols-outlined text-[32px]">photo_camera</span>
                 </div>

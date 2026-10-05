@@ -28,25 +28,11 @@ export default function App() {
 
 function AppShell() {
   const [currentTab, setCurrentTab] = useState<ViewTab>('home');
-  const [stage1SampleMode, setStage1SampleMode] = useState<'positive' | 'negative'>('positive');
   const [selectedLeafIdx, setSelectedLeafIdx] = useState<number>(0);
-  const [fieldGps, setFieldGps] = useState<{ latitude: number; longitude: number; accuracy?: number | null }>({
-    latitude: 27.71724,
-    longitude: 85.32402,
-    accuracy: 4.2,
-  });
 
   const handleNavigate = (tab: ViewTab) => {
     setCurrentTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleSelectPlantSample = (sampleType: 'positive' | 'negative' | 'custom') => {
-    if (sampleType === 'negative') {
-      setStage1SampleMode('negative');
-    } else {
-      setStage1SampleMode('positive');
-    }
   };
 
   return (
@@ -59,19 +45,11 @@ function AppShell() {
         {currentTab === 'home' && <HomeView onNavigate={handleNavigate} />}
 
         {(currentTab === 'detect' || currentTab === 'detection-workspace') && (
-          <DetectionWorkspaceView
-            onNavigate={handleNavigate}
-            onSelectSample={handleSelectPlantSample}
-            onGpsChange={setFieldGps}
-          />
+          <DetectionWorkspaceView onNavigate={handleNavigate} />
         )}
 
         {(currentTab === 'plant-result' || currentTab === 'stage1-result') && (
-          <Stage1ResultView
-            onNavigate={handleNavigate}
-            activeStateMode={stage1SampleMode}
-            gpsLocation={fieldGps}
-          />
+          <Stage1ResultView onNavigate={handleNavigate} />
         )}
 
         {(currentTab === 'detect-disease' || currentTab === 'leaf-detect') && (

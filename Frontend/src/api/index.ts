@@ -22,6 +22,10 @@ export { getModels } from './models.ts';
 export { getReady } from './health.ts';
 export type { ReadyComponent, ReadyResult } from './health.ts';
 export { absoluteImageUrl } from './urls.ts';
+export { validateImageFile } from './validateImage.ts';
+export type { PickedFileLike } from './validateImage.ts';
+export { resolveCapturedAt } from './capturedAt.ts';
+export type { CapturedAtInputs } from './capturedAt.ts';
 export { isLeafSegDetails, isTreeDetails } from './types.ts';
 export type {
   AnalysisDetail,
