@@ -8,9 +8,12 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import exc as sa_exc
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.logging import get_request_id
+from app.storage.base import StorageError, StoredFileNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +197,63 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONRe
     return limiter._inject_headers(response, request.state.view_rate_limit)
 
 
+async def database_unavailable_handler(
+    request: Request, exc: sa_exc.SQLAlchemyError
+) -> JSONResponse:
+    """SQL Server unreachable / connection dropped / pool exhausted -> 503.
+
+    The driver message (server name, SQL text, parameters) goes to the log only;
+    the client gets a fixed sentence (spec 11: never leak internals).
+    """
+    logger.error("database_unavailable", extra={"error_type": type(exc).__name__}, exc_info=exc)
+    return _problem_response(
+        request,
+        status_code=DatabaseUnavailableError.status_code,
+        code=DatabaseUnavailableError.code,
+        title=DatabaseUnavailableError.title,
+        detail="The database is temporarily unavailable. Please try again shortly.",
+    )
+
+
+async def database_error_handler(request: Request, exc: sa_exc.SQLAlchemyError) -> JSONResponse:
+    """Any other database error (constraint violation, bad SQL, ...) is OUR bug -> 500."""
+    logger.error("database_error", extra={"error_type": type(exc).__name__}, exc_info=exc)
+    return _problem_response(
+        request,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        code="INTERNAL_ERROR",
+        title="Internal error",
+        detail="An unexpected error occurred.",
+    )
+
+
+async def stored_file_not_found_handler(
+    request: Request, exc: StoredFileNotFoundError
+) -> JSONResponse:
+    """A file the database promised is missing on disk. The service normally
+    converts this itself (with context for the log); this is the safety net."""
+    logger.error("stored_file_missing", exc_info=exc)
+    return _problem_response(
+        request,
+        status_code=AnalysisNotFoundError.status_code,
+        code=AnalysisNotFoundError.code,
+        title=AnalysisNotFoundError.title,
+        detail="Image not found.",
+    )
+
+
+async def storage_error_handler(request: Request, exc: StorageError) -> JSONResponse:
+    """Any other storage failure (path guard tripped, disk error) -> 500, no paths leaked."""
+    logger.error("storage_error", extra={"error_type": type(exc).__name__}, exc_info=exc)
+    return _problem_response(
+        request,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        code="INTERNAL_ERROR",
+        title="Internal error",
+        detail="An unexpected error occurred.",
+    )
+
+
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error("unhandled_exception", exc_info=exc)
     return _problem_response(
@@ -205,6 +265,42 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
+class CatchAllErrorsMiddleware:
+    """Turns an unexpected exception into the usual problem+json 500 *inside* the stack.
+
+    Starlette runs the ``Exception`` handler in its outermost layer, outside every
+    middleware of ours. A 500 produced there has no ``X-Request-ID`` header, a null
+    ``request_id`` in the body (the request-id context is already reset), no CORS
+    headers (so the browser hides the body from the frontend) and no security
+    headers. Catching here, innermost, gives 500s the same treatment as every other
+    error. The ``Exception`` handler stays registered as the last-resort safety net.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        response_started = False
+
+        async def tracking_send(message: Message) -> None:
+            nonlocal response_started
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, receive, tracking_send)
+        except Exception as exc:
+            if response_started:
+                raise  # too late to change the answer; let the server drop the connection
+            response = await unhandled_exception_handler(Request(scope), exc)
+            await response(scope, receive, send)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AppError, cast(ExceptionHandler, app_error_handler))
     app.add_exception_handler(
@@ -214,4 +310,15 @@ def register_exception_handlers(app: FastAPI) -> None:
         StarletteHTTPException, cast(ExceptionHandler, http_exception_handler)
     )
     app.add_exception_handler(RateLimitExceeded, cast(ExceptionHandler, rate_limit_handler))
+    # Handlers are looked up along the exception's MRO, so the most specific wins:
+    # connection-level failures (and pool exhaustion) -> 503, everything else -> 500.
+    for unavailable in (sa_exc.OperationalError, sa_exc.InterfaceError, sa_exc.TimeoutError):
+        app.add_exception_handler(unavailable, cast(ExceptionHandler, database_unavailable_handler))
+    app.add_exception_handler(
+        sa_exc.SQLAlchemyError, cast(ExceptionHandler, database_error_handler)
+    )
+    app.add_exception_handler(
+        StoredFileNotFoundError, cast(ExceptionHandler, stored_file_not_found_handler)
+    )
+    app.add_exception_handler(StorageError, cast(ExceptionHandler, storage_error_handler))
     app.add_exception_handler(Exception, unhandled_exception_handler)

@@ -38,7 +38,10 @@ class LeafSegThresholds(BaseModel):
 
 
 class LeafSegDetails(BaseModel):
-    kind: Literal["leaf_segmentation"] = "leaf_segmentation"
+    # No default on purpose: a defaulted field is marked optional in the OpenAPI
+    # response schema, which stops TypeScript from narrowing the `details` union
+    # on `kind` (same shape as TreeDetails.kind).
+    kind: Literal["leaf_segmentation"]
     leaf_area_pct_of_image: float = Field(ge=0, le=100)
     affected_area_pct_of_leaf: float = Field(ge=0, le=100)
     lesion_count: int = Field(ge=0)

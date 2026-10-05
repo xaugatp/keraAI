@@ -70,10 +70,10 @@ def test_lifespan_stores_engine_and_session_factory_on_app_state(
 def test_readiness_reports_database_ok(client: TestClient) -> None:
     response = client.get("/health/ready")
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "ok",
-        "components": {"database": {"status": "ok", "detail": None}},
-    }
+    body = response.json()
+    assert body["status"] == "ok"
+    # Since Phase 5 the lifespan also registers a `models` check (fake registry here).
+    assert body["components"]["database"] == {"status": "ok", "detail": None}
 
 
 # --- degraded mode -----------------------------------------------------------

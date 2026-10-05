@@ -286,6 +286,7 @@ def postprocess_probabilities(
 def build_details(result: SegmentationResult, thresholds: LeafSegThresholds) -> LeafSegDetails:
     """Result -> the API/DB `details` payload (thresholds echoed for reproducibility)."""
     return LeafSegDetails(
+        kind="leaf_segmentation",
         leaf_area_pct_of_image=result.leaf_area_pct_of_image,
         affected_area_pct_of_leaf=result.affected_area_pct_of_leaf,
         lesion_count=result.lesion_count,

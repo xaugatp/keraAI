@@ -13,6 +13,7 @@ from tests.unit.ml_leafseg.helpers import make_thresholds
 
 def details(**overrides: Any) -> LeafSegDetails:
     values: dict[str, Any] = {
+        "kind": "leaf_segmentation",
         "leaf_area_pct_of_image": 60.0,
         "affected_area_pct_of_leaf": 0.83,
         "lesion_count": 2,
@@ -47,6 +48,7 @@ def test_json_shape_is_the_approved_contract() -> None:
 
 def test_probability_means_default_to_none() -> None:
     d = LeafSegDetails(
+        kind="leaf_segmentation",
         leaf_area_pct_of_image=0.0,
         affected_area_pct_of_leaf=0.0,
         lesion_count=0,

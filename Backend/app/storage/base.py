@@ -14,13 +14,13 @@ from pathlib import Path
 from typing import Protocol
 
 from app.core.time import to_aware_utc
+from app.db.models.analysis import MODEL_KEYS
 
-# Mirrors the CHECK constraint on analyses.model_key (spec section 5.2).
-ALLOWED_MODEL_KEYS: tuple[str, ...] = (
-    "tree_classification",
-    "leaf_segmentation",
-    "leaf_disease",
-)
+# Same tuple the CHECK constraint on analyses.model_key is built from (spec
+# section 5.2): one source of truth, so a new model key can never be accepted by
+# the database yet rejected here (or the other way round). The name is kept
+# because callers and tests import it from this module.
+ALLOWED_MODEL_KEYS: tuple[str, ...] = MODEL_KEYS
 
 
 class StorageError(Exception):
