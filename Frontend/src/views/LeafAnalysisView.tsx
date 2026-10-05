@@ -1,115 +1,370 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { ViewTab, Stage2Diagnosis } from '../types';
-import { sampleDiagnoses, ASSETS } from '../data/mockData';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ViewTab } from '../types';
+import { ASSETS } from '../data/mockData';
 import { CameraModal } from '../components/CameraModal';
 import { ProcessingModal } from '../components/ProcessingModal';
 import type { ProcessingPhase } from '../components/ProcessingModal';
+import { useAnalysisState } from '../state/AnalysisContext';
+import { useModels } from '../hooks/useModels';
+import { useSamples } from '../hooks/useSamples';
+import {
+  ACCEPTED_IMAGE_TYPES,
+  AbortedError,
+  ApiError,
+  NetworkError,
+  absoluteImageUrl,
+  getAnalysis,
+  isLeafSegDetails,
+  predict,
+  resolveCapturedAt,
+  shouldAutoSubmitHandoff,
+  userMessageFor,
+  validateImageFile,
+} from '../api';
+import type { AnalysisSummary, LeafSegLabel, UploadSource } from '../api';
 
 interface LeafAnalysisViewProps {
   onNavigate: (tab: ViewTab) => void;
-  selectedDiagnosisIndex?: number;
 }
 
-export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
-  onNavigate,
-  selectedDiagnosisIndex = 0,
-}) => {
-  const [currentIdx, setCurrentIdx] = useState<number>(selectedDiagnosisIndex);
-  // NOTE: still a mock-data stub (F3 wires this view to the real Model 2 result). This state
-  // holds an object URL for whatever photo the user picked, just to keep the preview working.
-  const [customLeafImage, setCustomLeafImage] = useState<string | null>(null);
+/** What the hand-off (and an independent capture) carries forward as the photo's location. */
+interface LocationInput {
+  latitude: number | null;
+  longitude: number | null;
+  accuracyM: number | null;
+  capturedAt: Date | null;
+}
+
+const LABEL_STYLE: Record<
+  LeafSegLabel,
+  { icon: string; bannerClass: string; cardBorder: string; title: string; description: string }
+> = {
+  affected: {
+    icon: 'warning',
+    bannerClass: 'bg-[#ffdad6] border border-[#ba1a1a]/30 text-[#ba1a1a]',
+    cardBorder: 'border-[#ffdad6]',
+    title: 'Affected Tissue Detected',
+    description: 'Damaged or diseased tissue was found on this leaf.',
+  },
+  healthy: {
+    icon: 'check_circle',
+    bannerClass: 'bg-[#85f8c4]/30 border border-[#85f8c4] text-[#002114]',
+    cardBorder: 'border-[#dae2fd]',
+    title: 'Healthy Leaf',
+    description: 'No significant tissue damage was found on this leaf.',
+  },
+  no_leaf: {
+    icon: 'help',
+    bannerClass: 'bg-[#ffeed2] border border-[#ffb95f] text-[#5c3c00]',
+    cardBorder: 'border-[#ffb95f]/60',
+    title: 'No Banana Leaf Detected',
+    description: 'No banana leaf detected in this photo. Try a clearer, closer photo of a single leaf.',
+  },
+};
+
+function fmtPct(value: number | null | undefined, decimals = 1): string {
+  return value == null ? '—' : `${value.toFixed(decimals)}%`;
+}
+
+/** `value` is a 0-1 probability. */
+function fmtProbability(value: number | null | undefined): string {
+  return value == null ? '—' : `${(value * 100).toFixed(1)}%`;
+}
+
+function fmtMs(ms: number | null | undefined): string {
+  return ms == null ? '—' : `${Math.round(ms)} ms`;
+}
+
+const SPLIT_MIN = 5;
+const SPLIT_MAX = 95;
+const SPLIT_KEY_STEP = 5;
+
+export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }) => {
+  const { leaf, tree, file, setLeaf } = useAnalysisState();
+  const { byKey } = useModels();
+  const { samples, loading: samplesLoading } = useSamples('leaf_segmentation');
+
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingPhase, setProcessingPhase] = useState<ProcessingPhase>('idle');
-
-  // Release the previous preview's object URL whenever it changes, and on unmount.
-  useEffect(() => {
-    return () => {
-      if (customLeafImage) URL.revokeObjectURL(customLeafImage);
-    };
-  }, [customLeafImage]);
-
-  // This view is not yet wired to the real backend (F3); simulate the same brief "analysing"
-  // delay the old timer-driven ProcessingModal used to provide internally.
-  useEffect(() => {
-    if (!isProcessing) {
-      setProcessingPhase('idle');
-      return;
-    }
-    setProcessingPhase('analysing');
-    const timer = setTimeout(() => setIsProcessing(false), 1200);
-    return () => clearTimeout(timer);
-  }, [isProcessing]);
-
-  // Segmentation Studio Modes: 'overlay' | 'healthy-only' | 'unhealthy-only' | 'original'
-  const [viewMode, setViewMode] = useState<'overlay' | 'healthy-only' | 'unhealthy-only' | 'original'>('overlay');
-  const [isSliderActive, setIsSliderActive] = useState(false);
-  const [splitPosition, setSplitPosition] = useState<number>(50); // percentage
-
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const isDraggingRef = useRef<boolean>(false);
+  const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const selectedDiagnosis: Stage2Diagnosis = sampleDiagnoses[currentIdx] || sampleDiagnoses[0];
-  const isHealthy = selectedDiagnosis.severity === 'healthy';
+  // The photo currently selected/captured (or handed off), kept around so "Retry" can re-submit
+  // it unchanged.
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingSource, setPendingSource] = useState<UploadSource | null>(null);
+  const [pendingCapturedAt, setPendingCapturedAt] = useState<string | null>(null);
+  const [pendingLocation, setPendingLocation] = useState<LocationInput | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const healthyPercent = isHealthy ? 100 : Number((100 - selectedDiagnosis.infectedAreaPercent).toFixed(1));
-  const unhealthyPercent = isHealthy ? 0 : selectedDiagnosis.infectedAreaPercent;
+  const [phase, setPhase] = useState<ProcessingPhase>('idle');
+  const [progress, setProgress] = useState<number | undefined>(undefined);
+  const [submitError, setSubmitError] = useState<ApiError | NetworkError | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const handleMouseDown = () => {
-    isDraggingRef.current = true;
-  };
+  const [pageError, setPageError] = useState<string | null>(null);
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const pct = Math.max(5, Math.min(95, (x / rect.width) * 100));
-    setSplitPosition(pct);
-  };
+  // Guards the Stage-2 hand-off against re-submitting the same File on every re-render (see
+  // `shouldAutoSubmitHandoff`'s doc comment for why a ref, not just `file && !leaf`).
+  const handoffFileRef = useRef<File | null>(null);
 
-  const handleMouseUp = () => {
-    isDraggingRef.current = false;
-  };
+  // Overlay-vs-original comparison: a plain toggle, plus a drag/keyboard split slider that always
+  // compares the two regardless of which toggle is selected.
+  const [viewMode, setViewMode] = useState<'overlay' | 'original'>('overlay');
+  const [isSliderActive, setIsSliderActive] = useState(false);
+  const [splitPosition, setSplitPosition] = useState(50);
+  const sliderContainerRef = useRef<HTMLDivElement | null>(null);
+  const isDraggingRef = useRef(false);
 
-  const handleCustomCapture = (file: File, _capturedAt: string) => {
-    setCustomLeafImage(URL.createObjectURL(file));
-    setIsProcessing(true);
-  };
+  // Signed image URLs expire after ~1h: the same re-fetch-on-error-once pattern Stage1ResultView
+  // uses for `image.original_url` / `image.result_url`.
+  const [imageFailed, setImageFailed] = useState(false);
+  const [imageRetried, setImageRetried] = useState(false);
+  const [reloadingImage, setReloadingImage] = useState(false);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const isHealthyName = file.name.toLowerCase().includes('healthy') || file.name.toLowerCase().includes('clean');
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setCustomLeafImage(event.target.result as string);
-          if (isHealthyName) setCurrentIdx(1);
-          setIsProcessing(true);
+  useEffect(() => {
+    setImageFailed(false);
+    setImageRetried(false);
+  }, [leaf?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  const handleImageError = useCallback(async () => {
+    if (!leaf || imageRetried || reloadingImage) {
+      setImageFailed(true);
+      return;
+    }
+    setReloadingImage(true);
+    try {
+      const fresh = await getAnalysis(leaf.id);
+      setLeaf(fresh);
+      setImageRetried(true);
+    } catch {
+      setImageFailed(true);
+    } finally {
+      setReloadingImage(false);
+    }
+  }, [leaf, imageRetried, reloadingImage, setLeaf]);
+
+  const submit = useCallback(
+    async (
+      photoFile: File,
+      source: UploadSource,
+      cameraCapturedAt: string | null,
+      loc: LocationInput | null,
+    ) => {
+      setSubmitError(null);
+      setPhase('preparing');
+      setProgress(undefined);
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      const capturedAt = resolveCapturedAt({ cameraCapturedAt, gpsCapturedAt: loc?.capturedAt ?? null });
+
+      try {
+        const detail = await predict(
+          'leaf_segmentation',
+          {
+            file: photoFile,
+            source,
+            latitude: loc?.latitude ?? null,
+            longitude: loc?.longitude ?? null,
+            accuracyM: loc?.accuracyM ?? null,
+            capturedAt,
+          },
+          {
+            signal: controller.signal,
+            onProgress: (p) => {
+              if (p.phase === 'uploading') {
+                setPhase('uploading');
+                setProgress(p.percent);
+              } else {
+                setPhase('analysing');
+                setProgress(undefined);
+              }
+            },
+          },
+        );
+        setPhase('done');
+        setLeaf(detail);
+      } catch (error) {
+        if (error instanceof AbortedError) {
+          setPhase('idle');
+          return;
         }
-      };
-      reader.readAsDataURL(file);
+        setSubmitError(error as ApiError | NetworkError);
+        setPhase('error');
+      } finally {
+        abortControllerRef.current = null;
+      }
+    },
+    [setLeaf],
+  );
+
+  // Stage-2 hand-off: `file` is the SAME photo Model 1 just analysed. Submit it automatically,
+  // reusing the Stage 1 location, without making the user re-pick anything.
+  useEffect(() => {
+    if (!file) return;
+    if (!shouldAutoSubmitHandoff({ file, leaf, alreadySubmittedFile: handoffFileRef.current })) return;
+    handoffFileRef.current = file;
+
+    // tree.source can only be 'sample' when there is no original File to re-analyse, in which case
+    // Stage1ResultView never offers this hand-off — 'upload' is just a type-safe fallback.
+    const source: UploadSource = tree && tree.source !== 'sample' ? tree.source : 'upload';
+    const loc: LocationInput | null = tree?.location
+      ? {
+          latitude: tree.location.latitude ?? null,
+          longitude: tree.location.longitude ?? null,
+          accuracyM: tree.location.accuracy_m ?? null,
+          capturedAt: tree.location.captured_at ? new Date(tree.location.captured_at) : null,
+        }
+      : null;
+
+    setPendingFile(file);
+    setPendingSource(source);
+    setPendingCapturedAt(null);
+    setPendingLocation(loc);
+    void submit(file, source, null, loc);
+  }, [file, leaf, tree, submit]);
+
+  const selectFile = useCallback(
+    (pickedFile: File, source: UploadSource, capturedAt: string | null) => {
+      const error = validateImageFile(pickedFile);
+      if (error) {
+        setPageError(error);
+        return;
+      }
+      setPageError(null);
+      setPreviewUrl(URL.createObjectURL(pickedFile));
+      setPendingFile(pickedFile);
+      setPendingSource(source);
+      setPendingCapturedAt(capturedAt);
+      // Independent entry on this view has no GPS UI (see the report: the hand-off is the one
+      // path that carries a location; a standalone capture here is sent without one).
+      setPendingLocation(null);
+      void submit(pickedFile, source, capturedAt, null);
+    },
+    [submit],
+  );
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const pickedFile = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (pickedFile) selectFile(pickedFile, 'upload', null);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) selectFile(droppedFile, 'upload', null);
+  };
+
+  const handleCancel = useCallback(() => {
+    abortControllerRef.current?.abort();
+    setPhase('idle');
+    setSubmitError(null);
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    if (pendingFile && pendingSource) {
+      void submit(pendingFile, pendingSource, pendingCapturedAt, pendingLocation);
+    }
+  }, [pendingFile, pendingSource, pendingCapturedAt, pendingLocation, submit]);
+
+  const openSample = useCallback(
+    async (sample: AnalysisSummary) => {
+      setPageError(null);
+      try {
+        const detail = await getAnalysis(sample.id);
+        setLeaf(detail);
+      } catch (error) {
+        setPageError(userMessageFor(error));
+      }
+    },
+    [setLeaf],
+  );
+
+  // --- Comparison slider (pointer events: mouse, touch and pen; plus arrow-key support) --------
+
+  const updateSplitFromClientX = useCallback((clientX: number) => {
+    const el = sliderContainerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const pct = Math.max(SPLIT_MIN, Math.min(SPLIT_MAX, ((clientX - rect.left) / rect.width) * 100));
+    setSplitPosition(pct);
+  }, []);
+
+  const handleSliderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    isDraggingRef.current = true;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    updateSplitFromClientX(e.clientX);
+  };
+  const handleSliderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    updateSplitFromClientX(e.clientX);
+  };
+  const handleSliderPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    isDraggingRef.current = false;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+  const handleSliderKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowLeft') {
+      setSplitPosition((p) => Math.max(SPLIT_MIN, p - SPLIT_KEY_STEP));
+      e.preventDefault();
+    } else if (e.key === 'ArrowRight') {
+      setSplitPosition((p) => Math.min(SPLIT_MAX, p + SPLIT_KEY_STEP));
+      e.preventDefault();
     }
   };
 
-  const handleSelectBenchmarkSample = () => {
-    setCustomLeafImage(null);
-    setCurrentIdx(0);
-    setIsProcessing(true);
-  };
+  // --- Derived view data -------------------------------------------------------------------------
 
-  const activeImage = customLeafImage || ASSETS.leafAnalysisSpecimen || selectedDiagnosis.imageUrl;
+  const details = leaf && isLeafSegDetails(leaf.details) ? leaf.details : null;
+  const rawLabel = leaf?.prediction?.label ?? null;
+  const label: LeafSegLabel | null =
+    rawLabel === 'affected' || rawLabel === 'healthy' || rawLabel === 'no_leaf' ? rawLabel : null;
+  const style = label ? LABEL_STYLE[label] : null;
+  const modelInfo = byKey.leaf_segmentation;
+  const hasLeafTissue = label !== null && label !== 'no_leaf';
+  const healthyPct = details && hasLeafTissue ? Math.max(0, 100 - details.affected_area_pct_of_leaf) : null;
+  const affectedPct = details && hasLeafTissue ? details.affected_area_pct_of_leaf : null;
+  const originalUrl = leaf ? absoluteImageUrl(leaf.image.original_url) : null;
+  const resultUrl = leaf ? absoluteImageUrl(leaf.image.result_url) : null;
+  const hasPendingHandoff = file !== null && leaf === null;
 
   return (
     <div className="w-full max-w-7xl mx-auto px-6 lg:px-12 py-10 flex flex-col gap-8">
-      {/* Functional Camera Modal */}
+      {/* Full-Screen Mobile-Optimized Camera Modal */}
       <CameraModal
         isOpen={isCameraOpen}
         mode="leaf"
         fallbackImage={ASSETS.leafAnalysisSpecimen}
         onClose={() => setIsCameraOpen(false)}
-        onCapture={handleCustomCapture}
+        onCapture={(capturedFile, capturedAt) => {
+          setIsCameraOpen(false);
+          selectFile(capturedFile, 'camera', capturedAt);
+        }}
+      />
+
+      {/* Real-state Processing Modal: driven by the actual predict() call (hand-off or manual). */}
+      <ProcessingModal
+        open={phase !== 'idle'}
+        phase={phase}
+        progress={progress}
+        error={submitError}
+        onCancel={handleCancel}
+        onRetry={phase === 'error' && pendingFile ? handleRetry : undefined}
       />
 
       {/* Hidden File Upload Input */}
@@ -117,16 +372,9 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
         ref={fileInputRef}
         id="leaf-analysis-upload"
         type="file"
-        accept="image/*"
+        accept={ACCEPTED_IMAGE_TYPES.join(',')}
         className="sr-only"
-        onChange={handleFileUpload}
-      />
-
-      {/* Processing Animation Modal (still a timed stub here; F3 wires the real Model 2 call) */}
-      <ProcessingModal
-        open={isProcessing}
-        phase={processingPhase}
-        onCancel={() => setIsProcessing(false)}
+        onChange={handleFileInputChange}
       />
 
       {/* Header */}
@@ -142,17 +390,42 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
           <span className="text-[#006948] font-bold">Leaf Analysis</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold text-[#131b2e] tracking-tight">
-          Leaf Health Analysis &amp; Tissue Segmentation
+          Leaf Health Analysis
         </h1>
         <p className="text-base text-[#3d4a42] leading-relaxed">
-          Stage 3 foliar segmentation studio: isolate affected unhealthy foliar tissue from healthy leaf blade using Model 4 U-Net architecture.
+          Model 2 measures how much of a banana leaf is healthy tissue versus affected tissue.
         </p>
       </header>
 
-      {/* TWO LARGE WORKSPACE CARDS (OPTION 01: USE CAMERA & OPTION 02: UPLOAD IMAGE) */}
+      {/* Selected photo preview (independent camera/upload entry only) */}
+      {previewUrl && (
+        <div className="bg-white p-4 rounded-2xl border border-[#dae2fd] shadow-sm flex items-center gap-4">
+          <img
+            src={previewUrl}
+            alt="Selected leaf preview"
+            className="w-16 h-16 rounded-xl object-cover border border-[#dae2fd] shrink-0"
+          />
+          <div className="flex flex-col flex-1 min-w-0">
+            <span className="text-sm font-semibold text-[#131b2e] truncate">
+              {pendingFile?.name ?? 'Captured photo'}
+            </span>
+            <span className="text-xs text-[#3d4a42]">
+              {pendingSource === 'camera' ? 'From camera' : 'Uploaded file'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {pageError && (
+        <div className="p-3.5 rounded-xl bg-[#ffdad6] border border-[#ba1a1a]/30 text-[#ba1a1a] text-sm">
+          {pageError}
+        </div>
+      )}
+
+      {/* TWO LARGE WORKSPACE CARDS (independent entry: camera / upload / samples) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
         {/* Option 1: Use Camera */}
-        <div className="bg-white p-7 rounded-2xl shadow-sm border border-[#dae2fd] flex flex-col justify-between gap-6 hover:shadow-md transition-shadow relative overflow-hidden">
+        <div className="order-1 md:order-2 bg-white p-7 rounded-2xl shadow-sm border border-[#dae2fd] flex flex-col justify-between gap-6 hover:shadow-md transition-shadow relative overflow-hidden">
           <div className="absolute top-0 right-0 px-3 py-1 bg-[#86f2e4]/30 text-[#006f66] font-mono text-[10px] font-bold rounded-bl-xl border-l border-b border-[#86f2e4]">
             IPHONE &bull; ANDROID READY
           </div>
@@ -162,9 +435,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
               <span className="px-3 py-1 rounded-md bg-[#86f2e4]/30 text-[#006f66] font-mono text-xs font-bold">
                 OPTION 01
               </span>
-              <span className="material-symbols-outlined text-[#006a61] text-[24px]">
-                photo_camera
-              </span>
+              <span className="material-symbols-outlined text-[#006a61] text-[24px]">photo_camera</span>
             </div>
 
             <div>
@@ -174,7 +445,6 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
               </p>
             </div>
 
-            {/* Viewfinder Preview Box */}
             <div
               onClick={() => setIsCameraOpen(true)}
               className="relative w-full h-48 rounded-xl overflow-hidden bg-[#dae2fd] border border-[#bccac0] cursor-pointer group flex items-center justify-center shadow-inner"
@@ -185,10 +455,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
                 src={ASSETS.leafAnalysisSpecimen}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
-
-              {/* Pulsing Scanline */}
               <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-[#85f8c4] to-transparent shadow-[0_0_12px_#85f8c4] animate-[pulse_2s_infinite]" />
-
               <div className="relative z-10 flex flex-col items-center gap-1 text-white text-center px-4">
                 <span className="material-symbols-outlined text-[32px] text-[#85f8c4] drop-shadow">
                   center_focus_strong
@@ -201,14 +468,11 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
             </div>
 
             <div className="p-3.5 rounded-xl bg-[#f2f3ff] border border-[#dae2fd] flex items-center gap-2.5 text-xs text-[#3d4a42]">
-              <span className="material-symbols-outlined text-[#006948] text-[20px] shrink-0">
-                info
-              </span>
+              <span className="material-symbols-outlined text-[#006948] text-[20px] shrink-0">info</span>
               <span>Point camera directly toward the banana leaf blade with clear natural lighting.</span>
             </div>
           </div>
 
-          {/* Single Robust Open Camera Button */}
           <div className="pt-2">
             <button
               type="button"
@@ -222,15 +486,13 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
         </div>
 
         {/* Option 2: Upload Image */}
-        <div className="bg-white p-7 rounded-2xl shadow-sm border border-[#dae2fd] flex flex-col justify-between gap-6 hover:shadow-md transition-shadow">
+        <div className="order-2 md:order-1 bg-white p-7 rounded-2xl shadow-sm border border-[#dae2fd] flex flex-col justify-between gap-6 hover:shadow-md transition-shadow">
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <span className="px-3 py-1 rounded-md bg-[#eaedff] font-mono text-xs font-bold text-[#131b2e]">
                 OPTION 02
               </span>
-              <span className="material-symbols-outlined text-[#006948] text-[24px]">
-                cloud_upload
-              </span>
+              <span className="material-symbols-outlined text-[#006948] text-[24px]">cloud_upload</span>
             </div>
 
             <div>
@@ -240,10 +502,20 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
               </p>
             </div>
 
-            {/* Dropzone */}
+            {/* Dropzone — real drag-and-drop */}
             <label
               htmlFor="leaf-analysis-upload"
-              className="cursor-pointer flex flex-col items-center justify-center p-8 rounded-xl bg-[#f2f3ff] hover:bg-[#eaedff] border-2 border-dashed border-[#bccac0] hover:border-[#006948] transition-colors text-center relative group"
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragActive(true);
+              }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={handleDrop}
+              className={`cursor-pointer flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed transition-colors text-center relative group ${
+                dragActive
+                  ? 'bg-[#dae2fd] border-[#006948]'
+                  : 'bg-[#f2f3ff] hover:bg-[#eaedff] border-[#bccac0] hover:border-[#006948]'
+              }`}
             >
               <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-sm text-[#006948] mb-3 border border-[#dae2fd] group-hover:scale-105 transition-transform">
                 <span className="material-symbols-outlined text-[26px]">add_photo_alternate</span>
@@ -254,20 +526,31 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
               </span>
             </label>
 
-            {/* Benchmark Samples: 1 example to see as requested */}
+            {/* Real pre-computed samples */}
             <div className="flex flex-col gap-2 mt-1">
               <span className="font-mono text-xs text-[#3d4a42] font-semibold tracking-wide">
-                QUICK BENCHMARK SAMPLE:
+                SAMPLE SPECIMENS:
               </span>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleSelectBenchmarkSample}
-                  className="px-3.5 py-2 rounded-lg bg-[#eaedff] hover:bg-[#dae2fd] text-[#131b2e] font-mono text-xs flex items-center gap-2 transition-colors border border-[#dae2fd] cursor-pointer shadow-sm"
-                >
-                  <span className="material-symbols-outlined text-[16px] text-[#006948]">spa</span>
-                  <span>Sample: Banana Leaf Foliar Specimen</span>
-                </button>
+                {samplesLoading && <span className="text-xs text-[#3d4a42]">Loading samples…</span>}
+                {!samplesLoading && samples.length === 0 && (
+                  <span className="text-xs text-[#3d4a42]">No samples available yet.</span>
+                )}
+                {samples.map((sample) => (
+                  <button
+                    key={sample.id}
+                    type="button"
+                    onClick={() => void openSample(sample)}
+                    className="px-3 py-1.5 rounded-lg bg-[#eaedff] hover:bg-[#dae2fd] text-[#131b2e] font-mono text-xs flex items-center gap-2 transition-colors border border-[#dae2fd] cursor-pointer"
+                  >
+                    <img
+                      src={absoluteImageUrl(sample.thumbnail_url)}
+                      alt=""
+                      className="w-6 h-6 rounded object-cover shrink-0"
+                    />
+                    <span>{sample.title ?? sample.display_label}</span>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -283,381 +566,316 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
         </div>
       </div>
 
-      {/* MAIN ANALYSIS STUDIO SECTION */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#006948]">
-            Interactive Foliar Tissue Studio
-          </span>
-          <span className="text-xs font-mono text-[#3d4a42]">
-            Model 4 U-Net Segmentation
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Interactive Segmentation Studio Canvas (7 Cols) */}
-          <div className="lg:col-span-7 flex flex-col gap-4">
-            {/* Segmentation View Mode Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-[#dae2fd]">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-mono font-bold text-[#131b2e] uppercase">
-                  Segmentation:
-                </span>
-                <div className="inline-flex p-1 rounded-lg bg-[#f2f3ff] border border-[#dae2fd] text-xs font-mono">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setViewMode('overlay');
-                      setIsSliderActive(false);
-                    }}
-                    className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
-                      viewMode === 'overlay' && !isSliderActive
-                        ? 'bg-[#006948] text-white font-bold shadow-sm'
-                        : 'text-[#3d4a42] hover:text-[#131b2e]'
-                    }`}
-                  >
-                    Healthy vs Unhealthy
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setViewMode('unhealthy-only');
-                      setIsSliderActive(false);
-                    }}
-                    className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
-                      viewMode === 'unhealthy-only' && !isSliderActive
-                        ? 'bg-[#ba1a1a] text-white font-bold shadow-sm'
-                        : 'text-[#3d4a42] hover:text-[#131b2e]'
-                    }`}
-                  >
-                    Unhealthy Part Only
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setViewMode('healthy-only');
-                      setIsSliderActive(false);
-                    }}
-                    className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
-                      viewMode === 'healthy-only' && !isSliderActive
-                        ? 'bg-[#006948] text-white font-bold shadow-sm'
-                        : 'text-[#3d4a42] hover:text-[#131b2e]'
-                    }`}
-                  >
-                    Healthy Part Only
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setViewMode('original');
-                      setIsSliderActive(false);
-                    }}
-                    className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
-                      viewMode === 'original' && !isSliderActive
-                        ? 'bg-[#131b2e] text-white font-bold shadow-sm'
-                        : 'text-[#3d4a42] hover:text-[#131b2e]'
-                    }`}
-                  >
-                    Original Leaf
-                  </button>
-                </div>
-              </div>
-
-              {/* Comparison Slider Toggle */}
-              <button
-                type="button"
-                onClick={() => setIsSliderActive(!isSliderActive)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
-                  isSliderActive
-                    ? 'bg-[#00855d] text-white border-[#00855d]'
-                    : 'bg-[#eaedff] text-[#131b2e] border-[#dae2fd] hover:bg-[#dae2fd]'
-                }`}
+      {/* RESULT STUDIO — driven entirely by useAnalysisState().leaf */}
+      {leaf && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#006948]">
+              Leaf Segmentation Result
+            </span>
+            {modelInfo?.is_placeholder && (
+              <span
+                title="Results come from placeholder weights and are not real predictions"
+                className="px-1.5 py-0.5 rounded bg-[#ffeed2] border border-[#ffb95f] text-[#825100] text-[10px] font-bold"
               >
-                <span className="material-symbols-outlined text-[16px]">compare</span>
-                <span>Split Slider</span>
-              </button>
-            </div>
-
-            {/* Canvas with Draggable Split Slider and ACCURATELY ALIGNED Lesion Overlays */}
-            <div
-              ref={containerRef}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-[#131b2e] shadow-xl border border-[#dae2fd] select-none"
-            >
-              {/* Base Image */}
-              <img
-                alt="Leaf specimen base"
-                className="w-full h-full object-cover"
-                src={activeImage}
-              />
-
-              {/* Segmentation Layer */}
-              {viewMode !== 'original' && (
-                <div
-                  className="absolute inset-0 pointer-events-none transition-opacity duration-200"
-                  style={{
-                    clipPath: isSliderActive ? `inset(0 0 0 ${splitPosition}%)` : 'none',
-                  }}
-                >
-                  {/* Contrast backing for isolated mode */}
-                  {viewMode === 'unhealthy-only' && (
-                    <div className="absolute inset-0 bg-black/60" />
-                  )}
-
-                  {/* Healthy Part Tint */}
-                  {(viewMode === 'overlay' || viewMode === 'healthy-only') && (
-                    <div className="absolute inset-0 bg-[#006948]/15 pointer-events-none" />
-                  )}
-
-                  {/* Unhealthy Part Highlight Vectors (Precisely aligned to real lesions in leaf photo) */}
-                  {!isHealthy && (viewMode === 'overlay' || viewMode === 'unhealthy-only') && (
-                    <svg
-                      className="absolute inset-0 w-full h-full"
-                      viewBox="0 0 1000 750"
-                      preserveAspectRatio="none"
-                    >
-                      {/* Central Necrotic Spot with Chlorotic Halo */}
-                      <polygon
-                        points="435,260 480,240 550,245 590,270 595,305 565,335 500,340 450,310 430,280"
-                        fill="rgba(186, 26, 26, 0.7)"
-                        stroke="#ba1a1a"
-                        strokeWidth="3.5"
-                      />
-
-                      {/* Right Necrotic Streak (Right of the midrib) */}
-                      <polygon
-                        points="630,345 675,325 715,350 725,390 690,425 645,420 625,380"
-                        fill="rgba(186, 26, 26, 0.7)"
-                        stroke="#ba1a1a"
-                        strokeWidth="3.5"
-                      />
-
-                      {/* Mid-Left Necrotic Streak */}
-                      <polygon
-                        points="180,370 240,345 295,375 285,430 215,445 165,410"
-                        fill="rgba(186, 26, 26, 0.65)"
-                        stroke="#ba1a1a"
-                        strokeWidth="3"
-                      />
-
-                      {/* Upper-Left Lesion */}
-                      <polygon
-                        points="225,120 280,100 325,125 315,165 260,175 220,150"
-                        fill="rgba(186, 26, 26, 0.65)"
-                        stroke="#ba1a1a"
-                        strokeWidth="3"
-                      />
-
-                      {/* Lower-Center Necrotic Spot */}
-                      <polygon
-                        points="535,510 570,490 605,510 610,545 575,565 540,545"
-                        fill="rgba(186, 26, 26, 0.65)"
-                        stroke="#ba1a1a"
-                        strokeWidth="2.5"
-                      />
-                    </svg>
-                  )}
-                </div>
-              )}
-
-              {/* Split Comparison Slider Handle */}
-              {isSliderActive && (
-                <div
-                  onMouseDown={handleMouseDown}
-                  style={{ left: `${splitPosition}%` }}
-                  className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_14px_rgba(0,0,0,0.8)] cursor-ew-resize flex items-center justify-center z-30"
-                >
-                  <div className="w-8 h-8 rounded-full bg-white text-[#131b2e] flex items-center justify-center shadow-lg border border-[#bccac0]">
-                    <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Bottom Legend: Strictly Healthy Part vs Unhealthy Part */}
-              <div className="absolute bottom-4 left-4 right-4 bg-white/95 backdrop-blur-md px-4 py-2.5 rounded-xl shadow-md border border-white/60 flex items-center justify-between text-xs font-mono">
-                <div className="flex items-center gap-4">
-                  <span className="flex items-center gap-1.5 text-[#006948] font-bold">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#006948]" />
-                    Healthy Part: {healthyPercent}%
-                  </span>
-                  <span className="flex items-center gap-1.5 text-[#ba1a1a] font-bold">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#ba1a1a]" />
-                    Unhealthy Part: {unhealthyPercent}%
-                  </span>
-                </div>
-                <span className="text-[11px] text-[#3d4a42] hidden sm:inline">
-                  Model 4 Pixel Segmentation
-                </span>
-              </div>
-            </div>
-
-            {/* Area Segmentation Breakdown Card */}
-            <div className="bg-white p-5 rounded-2xl border border-[#dae2fd] shadow-sm flex flex-col gap-3 font-mono">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-[#131b2e]">
-                  Proportional Foliar Tissue Breakdown
-                </span>
-                <span className="text-[11px] text-[#3d4a42]">
-                  Model 4 U-Net Topology
-                </span>
-              </div>
-
-              {/* Two-Tone Proportional Bar */}
-              <div className="w-full h-4 rounded-full overflow-hidden flex bg-[#dae2fd]">
-                <div
-                  style={{ width: `${healthyPercent}%` }}
-                  className="bg-[#006948] h-full transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-white"
-                  title="Healthy Part"
-                >
-                  {healthyPercent > 10 ? `${healthyPercent}%` : ''}
-                </div>
-                <div
-                  style={{ width: `${unhealthyPercent}%` }}
-                  className="bg-[#ba1a1a] h-full transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-white"
-                  title="Unhealthy Part"
-                >
-                  {unhealthyPercent > 10 ? `${unhealthyPercent}%` : ''}
-                </div>
-              </div>
-
-              {/* Two Distinct Cards: Healthy Part vs Unhealthy Part */}
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="p-3 rounded-xl bg-[#85f8c4]/20 border border-[#85f8c4] flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#006948] flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-[#006948]" />
-                      Healthy Part
-                    </span>
-                    <span className="text-sm font-extrabold text-[#006948]">
-                      {healthyPercent}%
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-[#3d4a42] leading-tight">
-                    Intact foliar tissue with active photosynthesis and uniform chlorophyll.
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-[#ffdad6]/40 border border-[#ba1a1a]/30 flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#ba1a1a] flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-[#ba1a1a]" />
-                      Unhealthy Part
-                    </span>
-                    <span className="text-sm font-extrabold text-[#ba1a1a]">
-                      {unhealthyPercent}%
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-[#3d4a42] leading-tight">
-                    Infected tissue displaying fungal streaks, chlorotic rings, or necrosis.
-                  </span>
-                </div>
-              </div>
-            </div>
+                Demo weights
+              </span>
+            )}
           </div>
 
-          {/* Right Column: Foliar Health Dashboard (5 Cols) */}
-          <div className="lg:col-span-5 flex flex-col gap-6">
-            <div className="bg-white p-7 rounded-2xl shadow-sm border border-[#dae2fd] flex flex-col gap-6">
-              {/* Status Indicator */}
-              {isHealthy ? (
-                <div className="flex items-center gap-3 p-3.5 rounded-xl bg-[#85f8c4]/30 border border-[#85f8c4] text-[#002114]">
-                  <span className="material-symbols-outlined text-[26px] text-[#006948]">check_circle</span>
-                  <span className="text-base font-extrabold tracking-tight">✓ Healthy Leaf Specimen</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3 p-3.5 rounded-xl bg-[#ffdad6] border border-[#ba1a1a]/30 text-[#ba1a1a]">
-                  <span className="material-symbols-outlined text-[26px]">warning</span>
-                  <span className="text-base font-extrabold tracking-tight">⚠ Tissue Damage Detected</span>
-                </div>
-              )}
-
-              {/* Health Metrics */}
-              <div className="flex flex-col gap-1">
-                <span className="text-xs uppercase tracking-wider text-[#3d4a42] font-semibold font-mono">
-                  Foliar Health Evaluation
-                </span>
-                <h2 className="text-2xl font-extrabold text-[#131b2e]">
-                  {isHealthy ? 'Clean Musa Tissue' : 'Compromised Foliar Canopy'}
-                </h2>
-                <span className="text-xs text-[#3d4a42]">
-                  Evaluated across 2,400 spectral points for chlorophyll density and fungal lesioning.
-                </span>
-              </div>
-
-              {/* Healthy vs Unhealthy Summary Box */}
-              <div className="p-4 rounded-xl bg-[#f2f3ff] border border-[#dae2fd] flex flex-col gap-2.5 font-mono text-xs">
-                <div className="flex justify-between py-1 border-b border-[#dae2fd]">
-                  <span className="text-[#3d4a42]">Healthy Part Area:</span>
-                  <span className="font-extrabold text-[#006948]">{healthyPercent}%</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-[#dae2fd]">
-                  <span className="text-[#3d4a42]">Unhealthy Part Area:</span>
-                  <span className="font-extrabold text-[#ba1a1a]">{unhealthyPercent}%</span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-[#dae2fd]">
-                  <span className="text-[#3d4a42]">Tissue Health Status:</span>
-                  <span className={`font-bold ${isHealthy ? 'text-[#006948]' : 'text-[#ba1a1a]'}`}>
-                    {isHealthy ? 'Optimal' : unhealthyPercent > 20 ? 'Critical' : 'Moderate'}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span className="text-[#3d4a42]">Segmentation Model:</span>
-                  <span className="font-bold text-[#131b2e]">Model 4: U-Net Semantic Segmenter</span>
-                </div>
-              </div>
-
-              {/* Model 4 Specific Telemetry */}
-              <div className="p-4 rounded-xl bg-[#faf8ff] border border-[#dae2fd] flex flex-col gap-3 font-mono text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] uppercase font-bold text-[#131b2e]">
-                    Model 4 Segmentation Telemetry
-                  </span>
-                  <span className="text-[10px] text-[#006948] font-bold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#006948]" />
-                    200 OK (364ms)
-                  </span>
-                </div>
-
-                <div className="bg-[#131b2e] text-[#85f8c4] p-2 rounded-lg text-[10px] truncate">
-                  POST /api/v1/model4/semantic-segmentation
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div>
-                    <span className="text-[#3d4a42] block text-[10px]">Dice Coefficient:</span>
-                    <span className="font-bold text-[#131b2e]">0.924</span>
-                  </div>
-                  <div>
-                    <span className="text-[#3d4a42] block text-[10px]">Pixel Resolution:</span>
-                    <span className="font-bold text-[#131b2e]">1000 × 750 px</span>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            {/* Left Column: Interactive Segmentation Studio Canvas (7 Cols) */}
+            <div className="lg:col-span-7 flex flex-col gap-4">
+              {/* View toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-[#dae2fd]">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-mono font-bold text-[#131b2e] uppercase">View:</span>
+                  <div className="inline-flex p-1 rounded-lg bg-[#f2f3ff] border border-[#dae2fd] text-xs font-mono">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewMode('overlay');
+                        setIsSliderActive(false);
+                      }}
+                      disabled={!resultUrl}
+                      className={`px-2.5 py-1 rounded transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+                        viewMode === 'overlay' && !isSliderActive
+                          ? 'bg-[#006948] text-white font-bold shadow-sm'
+                          : 'text-[#3d4a42] hover:text-[#131b2e]'
+                      }`}
+                    >
+                      Overlay
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setViewMode('original');
+                        setIsSliderActive(false);
+                      }}
+                      className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                        viewMode === 'original' && !isSliderActive
+                          ? 'bg-[#131b2e] text-white font-bold shadow-sm'
+                          : 'text-[#3d4a42] hover:text-[#131b2e]'
+                      }`}
+                    >
+                      Original
+                    </button>
                   </div>
                 </div>
-              </div>
 
-              {/* Transition Arrow to Detect Disease if user wants Pathogen ID */}
-              <div className="p-4 rounded-xl bg-[#fff7ed] border border-[#fed7aa] flex flex-col gap-2">
-                <span className="font-mono text-[11px] font-bold text-[#ea580c] uppercase tracking-wider">
-                  Cross-Pathology Reference:
-                </span>
-                <p className="text-xs text-[#131b2e] leading-tight">
-                  Want to identify the specific pathogen (Black Sigatoka, Cordana) and agronomic fungicide recommendations?
-                </p>
                 <button
                   type="button"
-                  onClick={() => onNavigate('detect-disease')}
-                  className="w-full py-2.5 px-4 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-sm"
+                  onClick={() => setIsSliderActive((v) => !v)}
+                  disabled={!resultUrl}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 border transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+                    isSliderActive
+                      ? 'bg-[#00855d] text-white border-[#00855d]'
+                      : 'bg-[#eaedff] text-[#131b2e] border-[#dae2fd] hover:bg-[#dae2fd]'
+                  }`}
+                  title="Drag (or use the arrow keys) to compare the overlay against the original photo"
                 >
-                  <span>Go to Detect Disease (Model 3)</span>
-                  <span className="material-symbols-outlined text-[16px] font-bold">
-                    arrow_forward
-                  </span>
+                  <span className="material-symbols-outlined text-[16px]">compare</span>
+                  <span>Split Compare</span>
                 </button>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-col gap-2 pt-1">
+              {/* Image area: original photo as the base layer, overlay PNG on top */}
+              <div
+                ref={sliderContainerRef}
+                className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-[#131b2e] shadow-xl border border-[#dae2fd] select-none touch-none"
+              >
+                {!imageFailed ? (
+                  <>
+                    <img
+                      alt="Original leaf photo"
+                      className="absolute inset-0 w-full h-full object-cover"
+                      src={originalUrl ?? undefined}
+                      onError={() => void handleImageError()}
+                    />
+                    {resultUrl && (
+                      <img
+                        alt="Leaf segmentation overlay — green outlines the leaf, red marks affected tissue"
+                        className="absolute inset-0 w-full h-full object-cover"
+                        src={resultUrl}
+                        onError={() => void handleImageError()}
+                        style={
+                          isSliderActive
+                            ? { clipPath: `inset(0 ${100 - splitPosition}% 0 0)` }
+                            : viewMode === 'overlay'
+                              ? undefined
+                              : { display: 'none' }
+                        }
+                      />
+                    )}
+                    {isSliderActive && (
+                      <div
+                        role="slider"
+                        tabIndex={0}
+                        aria-label="Comparison slider: overlay versus original photo"
+                        aria-orientation="horizontal"
+                        aria-valuemin={SPLIT_MIN}
+                        aria-valuemax={SPLIT_MAX}
+                        aria-valuenow={Math.round(splitPosition)}
+                        onPointerDown={handleSliderPointerDown}
+                        onPointerMove={handleSliderPointerMove}
+                        onPointerUp={handleSliderPointerUp}
+                        onPointerCancel={handleSliderPointerUp}
+                        onKeyDown={handleSliderKeyDown}
+                        style={{ left: `${splitPosition}%` }}
+                        className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_14px_rgba(0,0,0,0.8)] cursor-ew-resize flex items-center justify-center z-30 touch-none focus:outline-none focus:ring-2 focus:ring-[#85f8c4]"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-white text-[#131b2e] flex items-center justify-center shadow-lg border border-[#bccac0]">
+                          <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
+                        </div>
+                      </div>
+                    )}
+                    {!resultUrl && (
+                      <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl text-xs text-[#3d4a42] text-center">
+                        No overlay image is available for this result.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-white/70">
+                    <span className="material-symbols-outlined text-[36px]">broken_image</span>
+                    <span className="text-sm">Image unavailable</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Area breakdown — real numbers from the server, only meaningful when a leaf was found */}
+              {hasLeafTissue ? (
+                <div className="bg-white p-5 rounded-2xl border border-[#dae2fd] shadow-sm flex flex-col gap-3 font-mono">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#131b2e]">
+                    Leaf Tissue Breakdown
+                  </span>
+                  <div className="w-full h-4 rounded-full overflow-hidden flex bg-[#dae2fd]">
+                    <div
+                      style={{ width: `${healthyPct ?? 0}%` }}
+                      className="bg-[#006948] h-full transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-white"
+                      title="Healthy"
+                    >
+                      {(healthyPct ?? 0) > 10 ? fmtPct(healthyPct, 0) : ''}
+                    </div>
+                    <div
+                      style={{ width: `${affectedPct ?? 0}%` }}
+                      className="bg-[#ba1a1a] h-full transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-white"
+                      title="Affected"
+                    >
+                      {(affectedPct ?? 0) > 10 ? fmtPct(affectedPct, 0) : ''}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div className="p-3 rounded-xl bg-[#85f8c4]/20 border border-[#85f8c4] flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#006948] flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-[#006948]" />
+                          Healthy
+                        </span>
+                        <span className="text-sm font-extrabold text-[#006948]">{fmtPct(healthyPct)}</span>
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-[#ffdad6]/40 border border-[#ba1a1a]/30 flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#ba1a1a] flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-[#ba1a1a]" />
+                          Affected
+                        </span>
+                        <span className="text-sm font-extrabold text-[#ba1a1a]">{fmtPct(affectedPct)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                label === 'no_leaf' && (
+                  <div className="bg-white p-5 rounded-2xl border border-[#ffb95f]/60 shadow-sm text-sm text-[#5c3c00]">
+                    No tissue breakdown is shown because the model could not find enough leaf area in
+                    this photo.
+                  </div>
+                )
+              )}
+            </div>
+
+            {/* Right Column: Status + Measurements (5 Cols) */}
+            <div className="lg:col-span-5 flex flex-col gap-6">
+              <div
+                className={`bg-white p-7 rounded-2xl shadow-sm border ${style?.cardBorder ?? 'border-[#dae2fd]'} flex flex-col gap-6`}
+              >
+                <div className={`flex items-center gap-3 p-3.5 rounded-xl ${style?.bannerClass ?? 'bg-[#eaedff] border border-[#dae2fd] text-[#131b2e]'}`}>
+                  <span className="material-symbols-outlined text-[26px]">{style?.icon ?? 'help'}</span>
+                  <span className="text-base font-extrabold tracking-tight">
+                    {style?.title ?? 'Result unavailable'}
+                  </span>
+                </div>
+                <p className="text-xs text-[#3d4a42] leading-relaxed -mt-3">
+                  {style?.description ?? 'This analysis did not return a recognised result.'}
+                </p>
+
+                {/* Measurements */}
+                <div className="p-4 rounded-xl bg-[#f2f3ff] border border-[#dae2fd] flex flex-col gap-2 font-mono text-xs">
+                  <span className="text-[10px] uppercase font-bold text-[#3d4a42] tracking-wider">
+                    Measurements
+                  </span>
+                  <div className="flex justify-between py-1 border-b border-[#dae2fd]">
+                    <span className="text-[#3d4a42]">Leaf coverage of photo:</span>
+                    <span className="font-bold text-[#131b2e]">{fmtPct(details?.leaf_area_pct_of_image)}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-[#dae2fd]">
+                    <span className="text-[#3d4a42]">Lesion count:</span>
+                    <span className="font-bold text-[#131b2e]">{details?.lesion_count ?? '—'}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-[#dae2fd]">
+                    <span className="text-[#3d4a42]">Largest lesion (% of leaf):</span>
+                    <span className="font-bold text-[#131b2e]">
+                      {fmtPct(details?.largest_lesion_pct_of_leaf)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-[#dae2fd]">
+                    <span className="text-[#3d4a42]">Mean leaf probability:</span>
+                    <span className="font-bold text-[#131b2e]">
+                      {fmtProbability(details?.mean_leaf_probability)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-[#3d4a42]">Mean affected probability:</span>
+                    <span className="font-bold text-[#131b2e]">
+                      {fmtProbability(details?.mean_affected_probability)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Thresholds — secondary/technical, collapsed by default */}
+                {details && (
+                  <details className="rounded-xl bg-[#faf8ff] border border-[#dae2fd] p-4 text-xs font-mono">
+                    <summary className="cursor-pointer font-bold text-[#131b2e] uppercase tracking-wider text-[10px]">
+                      Thresholds used
+                    </summary>
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 mt-3 text-[#3d4a42]">
+                      <span>Leaf pixel threshold:</span>
+                      <span className="text-right font-bold text-[#131b2e]">
+                        {fmtProbability(details.thresholds.leaf)}
+                      </span>
+                      <span>Affected pixel threshold:</span>
+                      <span className="text-right font-bold text-[#131b2e]">
+                        {fmtProbability(details.thresholds.affected)}
+                      </span>
+                      <span>Min. leaf % (else no_leaf):</span>
+                      <span className="text-right font-bold text-[#131b2e]">
+                        {fmtPct(details.thresholds.min_leaf_pct)}
+                      </span>
+                      <span>Min. affected % (else healthy):</span>
+                      <span className="text-right font-bold text-[#131b2e]">
+                        {fmtPct(details.thresholds.min_affected_pct)}
+                      </span>
+                      <span>Min. lesion size %:</span>
+                      <span className="text-right font-bold text-[#131b2e]">
+                        {fmtPct(details.thresholds.min_lesion_pct)}
+                      </span>
+                      <span>Horizontal-flip TTA:</span>
+                      <span className="text-right font-bold text-[#131b2e]">
+                        {details.thresholds.tta_hflip ? 'Yes' : 'No'}
+                      </span>
+                    </div>
+                  </details>
+                )}
+
+                {/* Model & timing */}
+                <div className="p-4 rounded-xl bg-[#f2f3ff] border border-[#dae2fd] flex flex-col gap-2 font-mono text-xs">
+                  <span className="text-[10px] uppercase font-bold text-[#3d4a42] tracking-wider">
+                    Model &amp; Timing
+                  </span>
+                  <div className="flex justify-between py-1 border-b border-[#dae2fd]">
+                    <span className="text-[#3d4a42]">Model version:</span>
+                    <span className="font-bold text-[#131b2e]">{leaf.model_version}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-[#dae2fd]">
+                    <span className="text-[#3d4a42]">Analyzed:</span>
+                    <span className="font-bold text-[#131b2e]">{new Date(leaf.created_at).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-[#3d4a42]">Total time:</span>
+                    <span className="font-bold text-[#006948]">{fmtMs(leaf.timings_ms.total)}</span>
+                  </div>
+                </div>
+
+                {/* Cross-model reference */}
+                <div className="p-4 rounded-xl bg-[#fff7ed] border border-[#fed7aa] flex flex-col gap-2">
+                  <span className="font-mono text-[11px] font-bold text-[#ea580c] uppercase tracking-wider">
+                    Next: Identify the Disease
+                  </span>
+                  <p className="text-xs text-[#131b2e] leading-tight">
+                    Model 3 (coming soon) will identify the specific disease affecting this leaf.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('detect-disease')}
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-sm"
+                  >
+                    <span>Go to Detect Disease (Model 3)</span>
+                    <span className="material-symbols-outlined text-[16px] font-bold">arrow_forward</span>
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setIsCameraOpen(true)}
@@ -670,7 +888,33 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* No result yet: either a hand-off is about to run (the ProcessingModal covers it), or
+          there is genuinely nothing to show. */}
+      {!leaf && hasPendingHandoff && (
+        <div className="bg-white p-8 rounded-2xl border border-[#dae2fd] text-center text-sm text-[#3d4a42]">
+          Preparing your leaf analysis from the Plant Detection photo…
+        </div>
+      )}
+
+      {!leaf && !hasPendingHandoff && (
+        <div className="w-full max-w-3xl mx-auto px-6 py-12 flex flex-col items-center gap-4 text-center">
+          <span className="material-symbols-outlined text-[40px] text-[#3d4a42]">eco</span>
+          <h2 className="text-2xl font-extrabold text-[#131b2e]">No leaf analysis yet</h2>
+          <p className="text-sm text-[#3d4a42]">
+            Use the camera or upload above, try a sample, or analyse a banana plant photo first and
+            continue here with "Analyse the Leaf".
+          </p>
+          <button
+            type="button"
+            onClick={() => onNavigate('detect')}
+            className="mt-1 px-6 py-3 rounded-xl bg-[#006948] text-white hover:bg-[#00855d] font-semibold text-sm transition-all cursor-pointer"
+          >
+            Go to Plant Detection
+          </button>
+        </div>
+      )}
     </div>
   );
 };

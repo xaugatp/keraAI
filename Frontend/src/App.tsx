@@ -60,10 +60,7 @@ function AppShell() {
         )}
 
         {(currentTab === 'leaf-analysis' || currentTab === 'leaf-result') && (
-          <LeafAnalysisView
-            onNavigate={handleNavigate}
-            selectedDiagnosisIndex={selectedLeafIdx}
-          />
+          <LeafAnalysisView onNavigate={handleNavigate} />
         )}
 
         {(currentTab === 'history' || currentTab === 'analysis-history') && (
