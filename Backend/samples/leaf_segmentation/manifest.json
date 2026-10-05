@@ -1,7 +1,22 @@
 [
   {
     "file": "banana_leaf_closeup.jpg",
-    "title": "Banana leaf close-up (development placeholder)",
+    "title": "Banana leaf — full view (development placeholder)",
     "description": "Development placeholder, to be replaced by the owner's real sample photos. A banana leaf with visible lesions. While dummy (randomly initialised) weights are installed, the measurements shown for it are not real results."
+  },
+  {
+    "file": "banana_leaf_crop_upper.jpg",
+    "title": "Banana leaf — upper section crop (placeholder)",
+    "description": "Development placeholder: a crop of the same source leaf photo, framed differently for UI variety. Dummy weights — the measurements shown are not real results."
+  },
+  {
+    "file": "banana_leaf_crop_midrib.jpg",
+    "title": "Banana leaf — midrib crop (placeholder)",
+    "description": "Development placeholder: a crop of the same source leaf photo, framed differently for UI variety. Dummy weights — the measurements shown are not real results."
+  },
+  {
+    "file": "banana_leaf_crop_lower.jpg",
+    "title": "Banana leaf — lower section crop (placeholder)",
+    "description": "Development placeholder: a crop of the same source leaf photo, framed differently for UI variety. Dummy weights — the measurements shown are not real results."
   }
 ]

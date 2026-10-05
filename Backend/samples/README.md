@@ -9,16 +9,22 @@ samples/
   tree_classification/      <- one folder per model key
     manifest.json
     banana_leaf_closeup.jpg
+    banana_leaf_crop_upper.jpg
+    banana_leaf_crop_midrib.jpg
+    banana_leaf_crop_lower.jpg
   leaf_segmentation/
     manifest.json
-    banana_leaf_closeup.jpg
+    (same four files)
 ```
 
-## The two images that are here are DEVELOPMENT PLACEHOLDERS
+## The images that are here are DEVELOPMENT PLACEHOLDERS
 
-`banana_leaf_closeup.jpg` is the project's own leaf photo, shrunk to 1024 px with the metadata removed. It is used for both
-models only so the app has something to show. Replace it with your real sample photos, and while the dummy weights are
-installed the results shown for any sample are random numbers, not predictions.
+All four files come from the project's own single leaf photo — `banana_leaf_closeup.jpg` is the full photo (shrunk to
+1024 px, metadata removed); the other three are real crops of different regions of that same photo, so the sample picker
+has some visual variety instead of one button. They are used for both models only so the app has something to show, and
+they are a weak fit for the tree model in particular (a leaf close-up, not a whole tree). Replace them with your real
+sample photos — ideally whole-tree shots for `tree_classification` — and while the dummy weights are installed the
+results shown for any sample are random numbers, not predictions.
 
 ## manifest.json
 
@@ -50,7 +56,7 @@ written, and every problem is listed at once.
 
 1. Copy the photos into the model's folder (JPEG, PNG or WEBP; keep them small, about 1000 px on the long side is plenty,
    because they are committed to git). Phone photos work, EXIF rotation is applied and EXIF is not stored.
-2. Add one entry per photo to that folder's `manifest.json`, and delete the placeholder entry and image.
+2. Add one entry per photo to that folder's `manifest.json`, and delete the placeholder entries and images.
 3. Seed (from `Backend/`, venv active):
 
    ```powershell
