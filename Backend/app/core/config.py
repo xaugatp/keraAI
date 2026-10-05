@@ -22,6 +22,34 @@ class TreeModelSettings(BaseModel):
     positive_class: str
     uncertain_threshold: float
     display_names: dict[str, str]
+    # True while the weights file is a randomly-initialised stand-in. Surfaced
+    # via GET /models so the UI can badge results as "demo weights" (D-06: never
+    # let placeholder output pass as a real prediction).
+    is_placeholder: bool = False
+
+
+class LeafSegModelSettings(BaseModel):
+    """Model 2 (leaf segmentation: healthy leaf tissue vs affected area).
+
+    The architecture/IO facts (Unet + resnet34, 2 sigmoid channels, 512px,
+    ImageNet normalisation) come from the training notebook and must match the
+    checkpoint; the thresholds and min-area rules are post-processing policy and
+    can be tuned without retraining.
+    """
+
+    enabled: bool
+    weights_path: str
+    model_version: str
+    encoder: str
+    imgsz: int
+    leaf_threshold: float
+    affected_threshold: float
+    tta_hflip: bool
+    # Post-processing policy (percentages, not fractions, to read well in .env)
+    min_leaf_pct: float  # leaf share of the image below which we say "no leaf"
+    min_lesion_pct: float  # drop lesion blobs smaller than this % of leaf area
+    min_affected_pct: float  # affected % of leaf below which the leaf is "healthy"
+    is_placeholder: bool = False
 
 
 class Settings(BaseSettings):
@@ -83,6 +111,24 @@ class Settings(BaseSettings):
             "non_banana": "Not a banana tree",
         }
     )
+    tree_is_placeholder: bool = False
+
+    # --- model 2: leaf segmentation ---
+    leaf_seg_enabled: bool = True
+    leaf_seg_weights_path: str = "weights/leaf_seg_v1.pt"
+    leaf_seg_model_version: str = "leaf_seg_v1"
+    leaf_seg_encoder: str = "resnet34"
+    # U-Net halves the resolution five times, so the side must divide by 32.
+    leaf_seg_imgsz: int = Field(default=512, ge=64, multiple_of=32)
+    leaf_seg_leaf_threshold: float = Field(default=0.50, gt=0, lt=1)
+    # 0.85 is the notebook's tuned value (tuned on its test split, so treat it
+    # as optimistic and re-tune on a validation split when retraining).
+    leaf_seg_affected_threshold: float = Field(default=0.85, gt=0, lt=1)
+    leaf_seg_tta_hflip: bool = True
+    leaf_seg_min_leaf_pct: float = Field(default=3.0, ge=0, le=100)
+    leaf_seg_min_lesion_pct: float = Field(default=0.05, ge=0, le=100)
+    leaf_seg_min_affected_pct: float = Field(default=0.5, ge=0, le=100)
+    leaf_seg_is_placeholder: bool = False
 
     @field_validator("db_port", mode="before")
     @classmethod
@@ -121,6 +167,24 @@ class Settings(BaseSettings):
             positive_class=self.tree_positive_class,
             uncertain_threshold=self.tree_uncertain_threshold,
             display_names=self.tree_display_names,
+            is_placeholder=self.tree_is_placeholder,
+        )
+
+    @property
+    def leaf_seg(self) -> LeafSegModelSettings:
+        return LeafSegModelSettings(
+            enabled=self.leaf_seg_enabled,
+            weights_path=self.leaf_seg_weights_path,
+            model_version=self.leaf_seg_model_version,
+            encoder=self.leaf_seg_encoder,
+            imgsz=self.leaf_seg_imgsz,
+            leaf_threshold=self.leaf_seg_leaf_threshold,
+            affected_threshold=self.leaf_seg_affected_threshold,
+            tta_hflip=self.leaf_seg_tta_hflip,
+            min_leaf_pct=self.leaf_seg_min_leaf_pct,
+            min_lesion_pct=self.leaf_seg_min_lesion_pct,
+            min_affected_pct=self.leaf_seg_min_affected_pct,
+            is_placeholder=self.leaf_seg_is_placeholder,
         )
 
 
