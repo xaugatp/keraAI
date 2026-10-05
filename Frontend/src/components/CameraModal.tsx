@@ -31,7 +31,8 @@ export const CameraModal: React.FC<CameraModalProps> = ({
 
   // Hardware Stream State
   const [isLiveStreamActive, setIsLiveStreamActive] = useState<boolean>(false);
-  const [streamErrorNotice, setStreamErrorNotice] = useState<string | null>(null);
+  // The notice text is set below but not rendered yet; F2 (spec §2, CameraModal) will display it.
+  const [, setStreamErrorNotice] = useState<string | null>(null);
   const [capturedPreview, setCapturedPreview] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -270,10 +271,6 @@ export const CameraModal: React.FC<CameraModalProps> = ({
       };
       reader.readAsDataURL(file);
     }
-  };
-
-  const triggerNativeCamera = () => {
-    nativeInputRef.current?.click();
   };
 
   const confirmCapturedPhoto = () => {

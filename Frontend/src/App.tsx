@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ViewTab } from './types';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -30,7 +30,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSelectPlantSample = (sampleType: 'positive' | 'negative' | 'custom', customImg?: string) => {
+  const handleSelectPlantSample = (sampleType: 'positive' | 'negative' | 'custom') => {
     if (sampleType === 'negative') {
       setStage1SampleMode('negative');
     } else {

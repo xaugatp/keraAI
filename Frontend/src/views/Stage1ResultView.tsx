@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ViewTab } from '../types';
-import { defaultStage1Data, ASSETS } from '../data/mockData';
+import { ASSETS } from '../data/mockData';
 
 interface Stage1ResultViewProps {
   onNavigate: (tab: ViewTab) => void;

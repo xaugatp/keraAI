@@ -1,6 +1,0 @@
-{
-  "name": "KERA AI - Banana Plant & Leaf Disease Detection System",
-  "description": "Agro-Vision computer vision platform for two-stage Musa taxonomy classification and real-time U-Net semantic disease segmentation.",
-  "requestFramePermissions": ["camera"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
