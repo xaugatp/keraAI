@@ -13,6 +13,7 @@ import { Stage1ResultView } from './views/Stage1ResultView';
 import { DetectDiseaseView } from './views/DetectDiseaseView';
 import { LeafAnalysisView } from './views/LeafAnalysisView';
 import { AnalysisHistoryView } from './views/AnalysisHistoryView';
+import { AnalysisDetailView } from './views/AnalysisDetailView';
 import { AboutModelsView } from './views/AboutModelsView';
 import { AnalysisProvider } from './state/AnalysisContext';
 
@@ -62,6 +63,8 @@ function AppShell() {
         {(currentTab === 'history' || currentTab === 'analysis-history') && (
           <AnalysisHistoryView onNavigate={handleNavigate} />
         )}
+
+        {currentTab === 'history-detail' && <AnalysisDetailView onNavigate={handleNavigate} />}
 
         {(currentTab === 'about' || currentTab === 'about-models') && (
           <AboutModelsView onNavigate={handleNavigate} />

@@ -120,6 +120,7 @@ export type ViewTab =
   | 'leaf-detect'
   | 'leaf-result'
   | 'history'
+  | 'history-detail'
   | 'about'
   // aliases for backwards compatibility
   | 'detection-workspace'

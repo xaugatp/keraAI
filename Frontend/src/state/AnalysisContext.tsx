@@ -64,6 +64,14 @@ export interface AnalysisContextValue {
   /** Clear file, both results and the persisted last-analysis reference. */
   reset: () => void;
   /**
+   * A read-only record opened from History — deliberately separate from `tree`/`leaf`, which are
+   * the LIVE detect -> analyse-leaf session. Opening a past result must never be mistaken for (or
+   * clobber) a session in progress, and viewing it must never offer "Analyse the Leaf"-style
+   * hand-offs that imply a File is available (a history row has none).
+   */
+  viewing: AnalysisDetail | null;
+  setViewing: (analysis: AnalysisDetail | null) => void;
+  /**
    * After a refresh: re-fetch the last analysis of this tab and put it into `tree` or `leaf`.
    * Resolves the analysis, or `null` when there is nothing to restore (nothing stored, or it was
    * deleted — the stale reference is dropped). Rejects with the `ApiError`/`NetworkError` for
@@ -78,6 +86,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [file, setFile] = useState<File | null>(null);
   const [tree, setTreeState] = useState<AnalysisDetail | null>(null);
   const [leaf, setLeafState] = useState<AnalysisDetail | null>(null);
+  const [viewing, setViewing] = useState<AnalysisDetail | null>(null);
   // Guards restoreLast() against clobbering results the user produced while it was in flight.
   const generation = useRef(0);
 
@@ -122,8 +131,8 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AnalysisContextValue>(
-    () => ({ file, tree, leaf, setFile, setTree, setLeaf, reset, restoreLast }),
-    [file, tree, leaf, setTree, setLeaf, reset, restoreLast],
+    () => ({ file, tree, leaf, setFile, setTree, setLeaf, reset, viewing, setViewing, restoreLast }),
+    [file, tree, leaf, setTree, setLeaf, reset, viewing, restoreLast],
   );
 
   return <AnalysisContext.Provider value={value}>{children}</AnalysisContext.Provider>;

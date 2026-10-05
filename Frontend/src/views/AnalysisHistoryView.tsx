@@ -23,12 +23,10 @@ const MODEL_TABS: { id: ModelKey | 'all'; label: string }[] = [
   { id: 'leaf_segmentation', label: 'Model 2 · Leaf' },
 ];
 
-// The result view each model's history row opens into (this is a saved row, not a fresh photo —
-// there is no File to re-submit, so it opens read-only, same as a sample).
-const RESULT_TAB: Partial<Record<ModelKey, ViewTab>> = {
-  tree_classification: 'stage1-result',
-  leaf_segmentation: 'leaf-analysis',
-};
+// Models with a detail page to open into (this is a saved row, not a fresh photo — it always
+// opens read-only, via AnalysisDetailView, never the live DetectionWorkspaceView/LeafAnalysisView
+// workspaces). leaf_disease has no results yet, so it is left out.
+const VIEWABLE_MODELS = new Set<ModelKey>(['tree_classification', 'leaf_segmentation']);
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -54,7 +52,7 @@ function csvCell(value: string): string {
 }
 
 export const AnalysisHistoryView: React.FC<AnalysisHistoryViewProps> = ({ onNavigate }) => {
-  const { setFile, setTree, setLeaf } = useAnalysisState();
+  const { setViewing } = useAnalysisState();
 
   const [scope, setScope] = useState<Scope>('all_visible');
   const [modelFilter, setModelFilter] = useState<ModelKey | 'all'>('all');
@@ -95,17 +93,14 @@ export const AnalysisHistoryView: React.FC<AnalysisHistoryViewProps> = ({ onNavi
   };
 
   const openItem = async (item: AnalysisSummary) => {
-    const resultTab = RESULT_TAB[item.model_key];
-    if (!resultTab) return; // leaf_disease has no result view yet
+    if (!VIEWABLE_MODELS.has(item.model_key)) return;
     setActionError(null);
     setOpeningId(item.id);
     try {
       // Fresh fetch (not the summary row): signed image URLs expire, and only the detail has them.
       const detail = await getAnalysis(item.id);
-      setFile(null); // a saved row has no original File to carry into another model's stage
-      if (detail.model_key === 'leaf_segmentation') setLeaf(detail);
-      else setTree(detail);
-      onNavigate(resultTab);
+      setViewing(detail);
+      onNavigate('history-detail');
     } catch (err) {
       setActionError(userMessageFor(err));
     } finally {
