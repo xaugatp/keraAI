@@ -166,7 +166,7 @@ export const AboutModelsView: React.FC<AboutModelsViewProps> = ({ onNavigate }) 
                 <span className="font-mono text-xs font-bold text-[#131b2e] uppercase">
                   Taxonomy Confusion Matrix (Validation Set N=3,680)
                 </span>
-                <div className="grid grid-cols-4 gap-2 font-mono text-[11px] text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px] text-center">
                   <div className="p-2.5 rounded bg-[#85f8c4]/30 border border-[#85f8c4]">
                     <div className="font-bold text-[#006948]">99.1%</div>
                     <div className="text-[10px] text-[#3d4a42]">True Musa</div>
@@ -275,7 +275,7 @@ export const AboutModelsView: React.FC<AboutModelsViewProps> = ({ onNavigate }) 
                 <span className="font-mono text-xs font-bold text-[#131b2e] uppercase">
                   Disease Classification Validation Accuracy (N=4,100)
                 </span>
-                <div className="grid grid-cols-4 gap-2 font-mono text-[11px] text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px] text-center">
                   <div className="p-2.5 rounded bg-[#85f8c4]/30 border border-[#85f8c4]">
                     <div className="font-bold text-[#006948]">97.4%</div>
                     <div className="text-[10px] text-[#3d4a42]">Healthy Control</div>

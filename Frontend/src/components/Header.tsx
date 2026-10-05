@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { ViewTab } from '../types';
-import { ASSETS } from '../data/mockData';
 import { useHealth } from '../hooks/useHealth';
 import type { HealthStatus } from '../hooks/useHealth';
 import { useModels } from '../hooks/useModels';
@@ -61,34 +60,23 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onNavigate }) => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-40 bg-[#faf8ff]/95 backdrop-blur-xl border-b border-[#e2e8f0]/80 shadow-[0_1px_8px_rgba(0,0,0,0.03)]">
-      <div className="h-20 max-w-7xl mx-auto px-6 lg:px-12 flex items-center justify-between gap-4">
-        {/* Brand Lockup */}
+      <div className="h-16 sm:h-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-12 flex items-center justify-between gap-2 sm:gap-4">
+        {/* Brand Lockup — a single self-contained glyph (no remote image/network dependency, which
+            on a phone can be slow or blocked and would otherwise leave the header blank). */}
         <button
           type="button"
           onClick={() => onNavigate('home')}
-          className="flex items-center gap-3 text-left focus:outline-none group cursor-pointer"
+          className="flex items-center gap-2 text-left focus:outline-none group cursor-pointer shrink-0"
         >
-          <img
-            alt="BananaVision AI Logo"
-            className="h-9 w-auto object-contain transition-transform group-hover:scale-105"
-            src={ASSETS.logo}
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
-          />
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-[18px] tracking-tight text-[#131b2e]">
-                BananaVision AI
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-[#eaedff] text-[#006948] font-mono text-[10px] font-bold uppercase tracking-wider border border-[#dae2fd]">
-                KERA
-              </span>
-            </div>
-            <span className="text-[12px] text-[#3d4a42] font-medium hidden sm:inline-block leading-tight">
-              Academic Computer Vision Project Demo
-            </span>
-          </div>
+          <span
+            aria-hidden="true"
+            className="text-[22px] sm:text-[26px] leading-none transition-transform group-hover:scale-110"
+          >
+            🍌
+          </span>
+          <span className="font-extrabold text-[17px] sm:text-[19px] tracking-tight text-[#131b2e]">
+            KERA AI
+          </span>
         </button>
 
         {/* Desktop Navigation */}
@@ -143,23 +131,28 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onNavigate }) => {
             </span>
           </div>
 
+          {/* Hidden below sm: "Detect" is already the first item in the hamburger menu, and on a
+              narrow phone this button plus the brand and the hamburger button would not fit on
+              one row without wrapping or shrinking illegibly. */}
           <button
             type="button"
             onClick={() => onNavigate('detect')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-[#006948] text-white text-xs sm:text-sm font-semibold hover:bg-[#00855d] active:scale-[0.98] transition-all shadow-[0_2px_8px_rgba(0,105,72,0.25)] whitespace-nowrap cursor-pointer"
+            className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 md:px-4 md:py-2.5 rounded-xl bg-[#006948] text-white text-xs md:text-sm font-semibold hover:bg-[#00855d] active:scale-[0.98] transition-all shadow-[0_2px_8px_rgba(0,105,72,0.25)] whitespace-nowrap cursor-pointer"
           >
             <span className="material-symbols-outlined text-[18px]">center_focus_strong</span>
             <span>Start Detection</span>
           </button>
 
-          {/* Mobile hamburger button */}
+          {/* Mobile hamburger button — a real 44x44px touch target (Apple/Material's minimum),
+              not just the icon's own small bounding box. */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 rounded-lg text-[#3d4a42] hover:bg-[#eaedff] cursor-pointer"
+            className="md:hidden flex items-center justify-center w-11 h-11 -mr-1 rounded-lg text-[#3d4a42] hover:bg-[#eaedff] active:bg-[#dae2fd] cursor-pointer"
             aria-label="Toggle navigation menu"
+            aria-expanded={mobileMenuOpen}
           >
-            <span className="material-symbols-outlined text-[24px]">
+            <span className="material-symbols-outlined text-[26px]">
               {mobileMenuOpen ? 'close' : 'menu'}
             </span>
           </button>
@@ -168,7 +161,7 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onNavigate }) => {
 
       {/* Mobile Nav Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-[#faf8ff] border-b border-[#dae2fd] px-6 py-4 flex flex-col gap-2 shadow-lg">
+        <div className="md:hidden bg-[#faf8ff] border-b border-[#dae2fd] px-4 sm:px-6 py-4 flex flex-col gap-1.5 shadow-lg max-h-[calc(100dvh-4rem)] overflow-y-auto">
           {navLinks.map((link) => (
             <button
               key={link.id}
@@ -177,7 +170,7 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onNavigate }) => {
                 onNavigate(link.id);
                 setMobileMenuOpen(false);
               }}
-              className={`text-left px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              className={`text-left px-3.5 py-3 rounded-lg text-[15px] font-medium transition-all ${
                 isLinkActive(link)
                   ? 'bg-[#00855d] text-white font-semibold'
                   : 'text-[#3d4a42] hover:bg-[#eaedff]'

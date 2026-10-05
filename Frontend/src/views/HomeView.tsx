@@ -237,7 +237,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                 </div>
 
                 {/* Card Bottom Telemetry Panel */}
-                <div className="p-5 bg-white grid grid-cols-3 gap-2 border-t border-[#eaedff]">
+                <div className="p-5 bg-white grid grid-cols-1 sm:grid-cols-3 gap-2 border-t border-[#eaedff]">
                   <div className="flex flex-col">
                     <span className="text-[11px] text-[#3d4a42]">Class Confirmation</span>
                     <span className="font-mono text-sm text-[#006948] font-bold">Musa Leaf (99.8%)</span>

@@ -104,7 +104,9 @@ function AppShell() {
       <Header currentTab={currentTab} onNavigate={handleNavigate} />
 
       {/* Main Content Area */}
-      <main className="w-full pt-20 bg-[#faf8ff] flex-1 flex flex-col">
+      {/* pt-16/pt-20 must track the header's own h-16 sm:h-20 (Header.tsx), or content either
+          hides under the fixed header on phones or leaves a gap above it on desktop. */}
+      <main className="w-full pt-16 sm:pt-20 bg-[#faf8ff] flex-1 flex flex-col">
         {currentTab === 'home' && <HomeView onNavigate={handleNavigate} />}
 
         {(currentTab === 'detect' || currentTab === 'detection-workspace') && (
