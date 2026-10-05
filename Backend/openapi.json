@@ -1,0 +1,1778 @@
+{
+  "components": {
+    "schemas": {
+      "AnalysisDetail": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "leaf_segmentation": "#/components/schemas/LeafSegDetails",
+                    "tree_classification": "#/components/schemas/TreeDetails"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/TreeDetails"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LeafSegDetails"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "image": {
+            "$ref": "#/components/schemas/ImageLinks"
+          },
+          "is_sample": {
+            "title": "Is Sample",
+            "type": "boolean"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GeoLocation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the client sent no coordinates, accuracy or capture time"
+          },
+          "model_key": {
+            "enum": [
+              "tree_classification",
+              "leaf_segmentation",
+              "leaf_disease"
+            ],
+            "title": "Model Key",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "prediction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Prediction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "enum": [
+              "upload",
+              "camera",
+              "sample"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "timings_ms": {
+            "$ref": "#/components/schemas/TimingsMs"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "model_key",
+          "model_version",
+          "status",
+          "source",
+          "is_sample",
+          "prediction",
+          "details",
+          "location",
+          "image",
+          "timings_ms",
+          "created_at"
+        ],
+        "title": "AnalysisDetail",
+        "type": "object"
+      },
+      "AnalysisSummary": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_label": {
+            "title": "Display Label",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "is_sample": {
+            "title": "Is Sample",
+            "type": "boolean"
+          },
+          "is_uncertain": {
+            "title": "Is Uncertain",
+            "type": "boolean"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "model_key": {
+            "enum": [
+              "tree_classification",
+              "leaf_segmentation",
+              "leaf_disease"
+            ],
+            "title": "Model Key",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "upload",
+              "camera",
+              "sample"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "thumbnail_url": {
+            "title": "Thumbnail Url",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "model_key",
+          "source",
+          "is_sample",
+          "display_label",
+          "confidence",
+          "is_uncertain",
+          "thumbnail_url",
+          "created_at"
+        ],
+        "title": "AnalysisSummary",
+        "type": "object"
+      },
+      "Body_predict_leaf_segmentation_api_v1_leaf_segmentation_predict_post": {
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO-8601 capture time; a time without an offset is read as UTC",
+            "title": "Captured At"
+          },
+          "gps_accuracy_m": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "GPS accuracy in metres",
+            "title": "Gps Accuracy M"
+          },
+          "image": {
+            "contentMediaType": "application/octet-stream",
+            "description": "Photo to analyse (JPEG, PNG or WEBP)",
+            "title": "Image",
+            "type": "string"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Degrees, -90..90",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Degrees, -180..180",
+            "title": "Longitude"
+          },
+          "source": {
+            "default": "upload",
+            "description": "Where the photo came from",
+            "enum": [
+              "upload",
+              "camera"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "Body_predict_leaf_segmentation_api_v1_leaf_segmentation_predict_post",
+        "type": "object"
+      },
+      "Body_predict_tree_api_v1_tree_predict_post": {
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO-8601 capture time; a time without an offset is read as UTC",
+            "title": "Captured At"
+          },
+          "gps_accuracy_m": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "GPS accuracy in metres",
+            "title": "Gps Accuracy M"
+          },
+          "image": {
+            "contentMediaType": "application/octet-stream",
+            "description": "Photo to analyse (JPEG, PNG or WEBP)",
+            "title": "Image",
+            "type": "string"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Degrees, -90..90",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Degrees, -180..180",
+            "title": "Longitude"
+          },
+          "source": {
+            "default": "upload",
+            "description": "Where the photo came from",
+            "enum": [
+              "upload",
+              "camera"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "Body_predict_tree_api_v1_tree_predict_post",
+        "type": "object"
+      },
+      "GeoLocation": {
+        "description": "Where and when the photo was taken, as reported by the client's device.\n\nEvery field is optional because the client may send any subset; the whole\nblock is ``null`` on an analysis when it sent none of them.",
+        "properties": {
+          "accuracy_m": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "GPS accuracy in metres",
+            "title": "Accuracy M"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Client-reported capture time (UTC)",
+            "title": "Captured At"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          }
+        },
+        "title": "GeoLocation",
+        "type": "object"
+      },
+      "ImageLinks": {
+        "description": "Relative URLs (the frontend prefixes its API base). Private images are signed\nand expire; sample images are public and need no signature.",
+        "properties": {
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "original_url": {
+            "title": "Original Url",
+            "type": "string"
+          },
+          "result_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Overlay/mask image; only models that produce one",
+            "title": "Result Url"
+          },
+          "thumbnail_url": {
+            "title": "Thumbnail Url",
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          }
+        },
+        "required": [
+          "original_url",
+          "thumbnail_url"
+        ],
+        "title": "ImageLinks",
+        "type": "object"
+      },
+      "LeafSegDetails": {
+        "properties": {
+          "affected_area_pct_of_leaf": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Affected Area Pct Of Leaf",
+            "type": "number"
+          },
+          "kind": {
+            "const": "leaf_segmentation",
+            "title": "Kind",
+            "type": "string"
+          },
+          "largest_lesion_pct_of_leaf": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Largest Lesion Pct Of Leaf",
+            "type": "number"
+          },
+          "leaf_area_pct_of_image": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Leaf Area Pct Of Image",
+            "type": "number"
+          },
+          "lesion_count": {
+            "minimum": 0.0,
+            "title": "Lesion Count",
+            "type": "integer"
+          },
+          "mean_affected_probability": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Affected Probability"
+          },
+          "mean_leaf_probability": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Leaf Probability"
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/LeafSegThresholds"
+          }
+        },
+        "required": [
+          "kind",
+          "leaf_area_pct_of_image",
+          "affected_area_pct_of_leaf",
+          "lesion_count",
+          "largest_lesion_pct_of_leaf",
+          "thresholds"
+        ],
+        "title": "LeafSegDetails",
+        "type": "object"
+      },
+      "LeafSegThresholds": {
+        "description": "The exact policy that produced a result, echoed so a stored row is reproducible.",
+        "properties": {
+          "affected": {
+            "description": "p(affected) >= this -> affected pixel",
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Affected",
+            "type": "number"
+          },
+          "leaf": {
+            "description": "p(leaf) >= this -> leaf pixel",
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Leaf",
+            "type": "number"
+          },
+          "min_affected_pct": {
+            "description": "affected share of the leaf (%) below which the leaf is 'healthy'",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Min Affected Pct",
+            "type": "number"
+          },
+          "min_leaf_pct": {
+            "description": "leaf share of the image (%) below which the result is 'no_leaf'",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Min Leaf Pct",
+            "type": "number"
+          },
+          "min_lesion_pct": {
+            "description": "lesion blobs smaller than this % of the leaf area are dropped",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Min Lesion Pct",
+            "type": "number"
+          },
+          "tta_hflip": {
+            "description": "probabilities averaged with the horizontally flipped pass",
+            "title": "Tta Hflip",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "leaf",
+          "affected",
+          "min_leaf_pct",
+          "min_lesion_pct",
+          "min_affected_pct",
+          "tta_hflip"
+        ],
+        "title": "LeafSegThresholds",
+        "type": "object"
+      },
+      "ModelInfoOut": {
+        "description": "One entry of ``GET /models`` \u2014 ``app.ml.base.ModelInfo`` plus ``is_placeholder``.",
+        "properties": {
+          "classes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Classes",
+            "type": "array"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "is_placeholder": {
+            "description": "True while the weights are a randomly-initialised stand-in (not real results)",
+            "title": "Is Placeholder",
+            "type": "boolean"
+          },
+          "key": {
+            "enum": [
+              "tree_classification",
+              "leaf_segmentation",
+              "leaf_disease"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the model is unavailable (never contains file paths)",
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "display_name",
+          "version",
+          "task",
+          "classes",
+          "status",
+          "is_placeholder"
+        ],
+        "title": "ModelInfoOut",
+        "type": "object"
+      },
+      "Page_AnalysisSummary_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "description": "1-based page number",
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Number of matching items over all pages",
+            "minimum": 0.0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "total_pages": {
+            "description": "0 when there are no matching items",
+            "minimum": 0.0,
+            "title": "Total Pages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total",
+          "total_pages"
+        ],
+        "title": "Page[AnalysisSummary]",
+        "type": "object"
+      },
+      "Prediction": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "0-1; null when the model has no single honest number",
+            "title": "Confidence"
+          },
+          "display_label": {
+            "description": "Human-readable label, or 'Uncertain'",
+            "title": "Display Label",
+            "type": "string"
+          },
+          "is_uncertain": {
+            "title": "Is Uncertain",
+            "type": "boolean"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Raw class key produced by the model",
+            "title": "Label"
+          }
+        },
+        "required": [
+          "label",
+          "display_label",
+          "confidence",
+          "is_uncertain"
+        ],
+        "title": "Prediction",
+        "type": "object"
+      },
+      "ProblemDetail": {
+        "description": "RFC 9457 application/problem+json body shape (for OpenAPI docs).",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors"
+          },
+          "instance": {
+            "title": "Instance",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "status": {
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "instance",
+          "code"
+        ],
+        "title": "ProblemDetail",
+        "type": "object"
+      },
+      "TimingsMs": {
+        "properties": {
+          "inference": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inference"
+          },
+          "postprocess": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postprocess"
+          },
+          "preprocess": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preprocess"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Wall-clock of the whole analysis",
+            "title": "Total"
+          }
+        },
+        "title": "TimingsMs",
+        "type": "object"
+      },
+      "TreeDetails": {
+        "properties": {
+          "kind": {
+            "const": "tree_classification",
+            "title": "Kind",
+            "type": "string"
+          },
+          "probabilities": {
+            "items": {
+              "$ref": "#/components/schemas/TreeProbability"
+            },
+            "title": "Probabilities",
+            "type": "array"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          },
+          "verdict": {
+            "enum": [
+              "banana_tree",
+              "not_banana_tree",
+              "uncertain"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "verdict",
+          "threshold",
+          "probabilities"
+        ],
+        "title": "TreeDetails",
+        "type": "object"
+      },
+      "TreeProbability": {
+        "properties": {
+          "class_key": {
+            "title": "Class Key",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "probability": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Probability",
+            "type": "number"
+          }
+        },
+        "required": [
+          "class_key",
+          "display_name",
+          "probability"
+        ],
+        "title": "TreeProbability",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "KeraAI API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/analyses": {
+      "get": {
+        "operationId": "list_analyses_api_v1_analyses_get",
+        "parameters": [
+          {
+            "description": "Only this model",
+            "in": "query",
+            "name": "model_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "tree_classification",
+                    "leaf_segmentation",
+                    "leaf_disease"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only this model",
+              "title": "Model Key"
+            }
+          },
+          {
+            "description": "mine = your own, samples = public samples, all_visible = both",
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all_visible",
+              "description": "mine = your own, samples = public samples, all_visible = both",
+              "enum": [
+                "mine",
+                "samples",
+                "all_visible"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "description": "1-based page number",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "description": "1-based page number",
+              "maximum": 1000000,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Anonymous per-device UUID v4 generated by the frontend (D-04).",
+            "in": "header",
+            "name": "X-Client-Id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "X-Client-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_AnalysisSummary_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Bad request: missing/invalid X-Client-Id, or the image is invalid or too small."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unexpected server error or the model failed during inference."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The model or the database is currently unavailable."
+          }
+        },
+        "summary": "History: your analyses plus the public samples",
+        "tags": [
+          "analyses"
+        ]
+      }
+    },
+    "/api/v1/analyses/{analysis_id}": {
+      "delete": {
+        "description": "Soft delete: hidden from every read afterwards; the files stay on disk (P-07).",
+        "operationId": "delete_analysis_api_v1_analyses__analysis_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "analysis_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Analysis Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Anonymous per-device UUID v4 generated by the frontend (D-04).",
+            "in": "header",
+            "name": "X-Client-Id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "X-Client-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Bad request: missing/invalid X-Client-Id, or the image is invalid or too small."
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Forbidden: invalid or expired image signature, or the analysis is an immutable sample."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Not found (also returned for another client's analysis \u2014 existence is never revealed)."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unexpected server error or the model failed during inference."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The model or the database is currently unavailable."
+          }
+        },
+        "summary": "Delete one of your analyses",
+        "tags": [
+          "analyses"
+        ]
+      },
+      "get": {
+        "operationId": "get_analysis_api_v1_analyses__analysis_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "analysis_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Analysis Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Anonymous per-device UUID v4 generated by the frontend (D-04).",
+            "in": "header",
+            "name": "X-Client-Id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "X-Client-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Bad request: missing/invalid X-Client-Id, or the image is invalid or too small."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Not found (also returned for another client's analysis \u2014 existence is never revealed)."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unexpected server error or the model failed during inference."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The model or the database is currently unavailable."
+          }
+        },
+        "summary": "One analysis in full",
+        "tags": [
+          "analyses"
+        ]
+      }
+    },
+    "/api/v1/analyses/{analysis_id}/image": {
+      "get": {
+        "description": "No ``X-Client-Id`` here: an ``<img>`` tag cannot send headers, so the signed\nlink is the credential. Samples are public and need no signature.",
+        "operationId": "get_analysis_image_api_v1_analyses__analysis_id__image_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "analysis_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Analysis Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Which image",
+            "in": "query",
+            "name": "variant",
+            "required": false,
+            "schema": {
+              "default": "original",
+              "description": "Which image",
+              "enum": [
+                "original",
+                "thumbnail",
+                "result"
+              ],
+              "title": "Variant",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unix expiry time, from the signed URL",
+            "in": "query",
+            "name": "exp",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Unix expiry time, from the signed URL",
+              "title": "Exp"
+            }
+          },
+          {
+            "description": "HMAC signature, from the signed URL",
+            "in": "query",
+            "name": "sig",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "HMAC signature, from the signed URL",
+              "title": "Sig"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/jpeg": {},
+              "image/png": {},
+              "image/webp": {}
+            },
+            "description": "The image file."
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Forbidden: invalid or expired image signature, or the analysis is an immutable sample."
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Not found (also returned for another client's analysis \u2014 existence is never revealed)."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unexpected server error or the model failed during inference."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The model or the database is currently unavailable."
+          }
+        },
+        "summary": "Download one image of an analysis",
+        "tags": [
+          "analyses"
+        ]
+      }
+    },
+    "/api/v1/leaf-segmentation/predict": {
+      "post": {
+        "operationId": "predict_leaf_segmentation_api_v1_leaf_segmentation_predict_post",
+        "parameters": [
+          {
+            "description": "Anonymous per-device UUID v4 generated by the frontend (D-04).",
+            "in": "header",
+            "name": "X-Client-Id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "X-Client-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_predict_leaf_segmentation_api_v1_leaf_segmentation_predict_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisDetail"
+                }
+              }
+            },
+            "description": "Analysis created and stored.",
+            "headers": {
+              "Location": {
+                "description": "Relative URL of the new analysis (GET it for later).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Bad request: missing/invalid X-Client-Id, or the image is invalid or too small."
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The upload exceeds the size limit."
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The image format is not supported."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Rate limit exceeded; see the Retry-After header."
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unexpected server error or the model failed during inference."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The model or the database is currently unavailable."
+          }
+        },
+        "summary": "Measure healthy vs damaged leaf tissue",
+        "tags": [
+          "leaf segmentation"
+        ]
+      }
+    },
+    "/api/v1/models": {
+      "get": {
+        "description": "Includes planned models (status `unavailable`) so the UI can show \"coming soon\".\n\nA pure in-memory read, so it runs on the event loop without a threadpool hop.",
+        "operationId": "list_models_api_v1_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelInfoOut"
+                  },
+                  "title": "Response List Models Api V1 Models Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unexpected server error or the model failed during inference."
+          }
+        },
+        "summary": "List models and their status",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/api/v1/tree/predict": {
+      "post": {
+        "operationId": "predict_tree_api_v1_tree_predict_post",
+        "parameters": [
+          {
+            "description": "Anonymous per-device UUID v4 generated by the frontend (D-04).",
+            "in": "header",
+            "name": "X-Client-Id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "X-Client-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_predict_tree_api_v1_tree_predict_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisDetail"
+                }
+              }
+            },
+            "description": "Analysis created and stored.",
+            "headers": {
+              "Location": {
+                "description": "Relative URL of the new analysis (GET it for later).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Bad request: missing/invalid X-Client-Id, or the image is invalid or too small."
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The upload exceeds the size limit."
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The image format is not supported."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Rate limit exceeded; see the Retry-After header."
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unexpected server error or the model failed during inference."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The model or the database is currently unavailable."
+          }
+        },
+        "summary": "Is this a banana tree?",
+        "tags": [
+          "tree classification"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Liveness only \u2014 no DB/model checks, must always be fast.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "health_ready_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Ready"
+      }
+    }
+  }
+}
