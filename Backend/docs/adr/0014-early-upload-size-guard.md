@@ -12,7 +12,7 @@ The predict routers use `route_class=UploadGuardRoute` (`app/api/predict.py`). I
 `PayloadTooLargeError` (413 `IMAGE_TOO_LARGE`) when the declared `Content-Length` exceeds `MAX_UPLOAD_MB` + 64 KiB.
 The slack covers multipart boundaries, part headers and the other form fields (Content-Length counts the whole body, not
 just the file). The exact limit on the file itself is still enforced while streaming it (`read_upload_limited`, 1 MB chunks).
-Verified on a real uvicorn with a 30 MB body: 413 comes back without the body being spooled.
+Verified on a real uvicorn with a 30 MB body: it answers `413 IMAGE_TOO_LARGE` with the normal problem+json body.
 
 ## Consequences
 + A declared-oversized upload is refused immediately, with the normal problem+json body, request id and CORS headers.
