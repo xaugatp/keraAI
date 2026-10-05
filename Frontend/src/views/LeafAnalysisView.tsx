@@ -18,10 +18,14 @@ import {
   predict,
   resolveCapturedAt,
   shouldAutoSubmitHandoff,
-  userMessageFor,
   validateImageFile,
+  withMinDuration,
 } from '../api';
 import type { AnalysisSummary, LeafSegLabel, UploadSource } from '../api';
+
+// Samples are a single, near-instant DB read (no inference happens) — without a floor, the
+// ProcessingModal would flash and vanish, which reads as broken rather than fast.
+const SAMPLE_OPEN_MIN_MS = 900;
 
 interface LeafAnalysisViewProps {
   onNavigate: (tab: ViewTab) => void;
@@ -94,6 +98,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
   const [pendingSource, setPendingSource] = useState<UploadSource | null>(null);
   const [pendingCapturedAt, setPendingCapturedAt] = useState<string | null>(null);
   const [pendingLocation, setPendingLocation] = useState<LocationInput | null>(null);
+  const [pendingSample, setPendingSample] = useState<AnalysisSummary | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const [phase, setPhase] = useState<ProcessingPhase>('idle');
@@ -163,6 +168,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
       loc: LocationInput | null,
     ) => {
       setSubmitError(null);
+      setPendingSample(null);
       setPhase('preparing');
       setProgress(undefined);
 
@@ -276,24 +282,52 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
     setSubmitError(null);
   }, []);
 
-  const handleRetry = useCallback(() => {
-    if (pendingFile && pendingSource) {
-      void submit(pendingFile, pendingSource, pendingCapturedAt, pendingLocation);
-    }
-  }, [pendingFile, pendingSource, pendingCapturedAt, pendingLocation, submit]);
-
   const openSample = useCallback(
     async (sample: AnalysisSummary) => {
+      // Samples are pre-computed (D-06: no re-running the model), but they still go through the
+      // same ProcessingModal as a real submission — a result appearing with no transition at all
+      // reads as broken, not fast. withMinDuration only pads the UI wait; the result itself is the
+      // real, already-computed row, fetched once.
       setPageError(null);
+      setSubmitError(null);
+      setPendingFile(null);
+      setPendingSource(null);
+      setPendingSample(sample);
+      setPhase('preparing');
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       try {
-        const detail = await getAnalysis(sample.id);
+        setPhase('analysing');
+        setProgress(undefined);
+        const detail = await withMinDuration(
+          getAnalysis(sample.id, controller.signal),
+          SAMPLE_OPEN_MIN_MS,
+        );
+        setPhase('done');
         setLeaf(detail);
       } catch (error) {
-        setPageError(userMessageFor(error));
+        if (error instanceof AbortedError) {
+          setPhase('idle');
+          return;
+        }
+        setSubmitError(error as ApiError | NetworkError);
+        setPhase('error');
+      } finally {
+        abortControllerRef.current = null;
       }
     },
     [setLeaf],
   );
+
+  const handleRetry = useCallback(() => {
+    if (pendingFile && pendingSource) {
+      void submit(pendingFile, pendingSource, pendingCapturedAt, pendingLocation);
+    } else if (pendingSample) {
+      void openSample(pendingSample);
+    }
+  }, [pendingFile, pendingSource, pendingCapturedAt, pendingLocation, pendingSample, submit, openSample]);
 
   // --- Comparison slider (pointer events: mouse, touch and pen; plus arrow-key support) --------
 
@@ -364,7 +398,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
         progress={progress}
         error={submitError}
         onCancel={handleCancel}
-        onRetry={phase === 'error' && pendingFile ? handleRetry : undefined}
+        onRetry={phase === 'error' && (pendingFile || pendingSample) ? handleRetry : undefined}
       />
 
       {/* Hidden File Upload Input */}

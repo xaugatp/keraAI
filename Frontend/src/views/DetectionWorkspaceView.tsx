@@ -16,10 +16,14 @@ import {
   getAnalysis,
   predict,
   resolveCapturedAt,
-  userMessageFor,
   validateImageFile,
+  withMinDuration,
 } from '../api';
 import type { AnalysisSummary, UploadSource } from '../api';
+
+// Samples are a single, near-instant DB read (no inference happens) — without a floor, the
+// ProcessingModal would flash and vanish, which reads as broken rather than fast.
+const SAMPLE_OPEN_MIN_MS = 900;
 
 interface DetectionWorkspaceViewProps {
   onNavigate: (tab: ViewTab) => void;
@@ -38,6 +42,7 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({ 
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingSource, setPendingSource] = useState<UploadSource | null>(null);
   const [pendingCapturedAt, setPendingCapturedAt] = useState<string | null>(null);
+  const [pendingSample, setPendingSample] = useState<AnalysisSummary | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const [phase, setPhase] = useState<ProcessingPhase>('idle');
@@ -96,6 +101,7 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({ 
   const submit = useCallback(
     async (file: File, source: UploadSource, cameraCapturedAt: string | null) => {
       setSubmitError(null);
+      setPendingSample(null);
       setPhase('preparing');
       setProgress(undefined);
 
@@ -185,24 +191,51 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({ 
     setSubmitError(null);
   }, []);
 
-  const handleRetry = useCallback(() => {
-    if (pendingFile && pendingSource) void submit(pendingFile, pendingSource, pendingCapturedAt);
-  }, [pendingFile, pendingSource, pendingCapturedAt, submit]);
-
   const openSample = useCallback(
     async (sample: AnalysisSummary) => {
+      // Samples are pre-computed (D-06: no re-running the model), but they still go through the
+      // same ProcessingModal as a real submission — a result appearing with literally no
+      // transition reads as broken, not fast. withMinDuration only pads the UI wait; the result
+      // itself is the real, already-computed row, fetched once.
       setPageError(null);
+      setSubmitError(null);
+      setPendingFile(null);
+      setPendingSource(null);
+      setPendingSample(sample);
+      setPhase('preparing');
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       try {
-        const detail = await getAnalysis(sample.id);
+        setPhase('analysing');
+        setProgress(undefined);
+        const detail = await withMinDuration(
+          getAnalysis(sample.id, controller.signal),
+          SAMPLE_OPEN_MIN_MS,
+        );
+        setPhase('done');
         setFile(null);
         setTree(detail);
         onNavigate('stage1-result');
       } catch (error) {
-        setPageError(userMessageFor(error));
+        if (error instanceof AbortedError) {
+          setPhase('idle');
+          return;
+        }
+        setSubmitError(error as ApiError | NetworkError);
+        setPhase('error');
+      } finally {
+        abortControllerRef.current = null;
       }
     },
     [onNavigate, setFile, setTree],
   );
+
+  const handleRetry = useCallback(() => {
+    if (pendingFile && pendingSource) void submit(pendingFile, pendingSource, pendingCapturedAt);
+    else if (pendingSample) void openSample(pendingSample);
+  }, [pendingFile, pendingSource, pendingCapturedAt, pendingSample, submit, openSample]);
 
   return (
     <div className="w-full max-w-7xl mx-auto px-6 lg:px-12 py-10 flex flex-col gap-8">
@@ -225,7 +258,7 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({ 
         progress={progress}
         error={submitError}
         onCancel={handleCancel}
-        onRetry={phase === 'error' && pendingFile ? handleRetry : undefined}
+        onRetry={phase === 'error' && (pendingFile || pendingSample) ? handleRetry : undefined}
       />
 
       {/* Header */}

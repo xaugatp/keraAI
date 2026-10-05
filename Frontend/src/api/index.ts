@@ -28,6 +28,7 @@ export { resolveCapturedAt } from './capturedAt.ts';
 export type { CapturedAtInputs } from './capturedAt.ts';
 export { shouldAutoSubmitHandoff } from './handoff.ts';
 export type { ShouldAutoSubmitHandoffInput } from './handoff.ts';
+export { withMinDuration } from './minDuration.ts';
 export { isLeafSegDetails, isTreeDetails } from './types.ts';
 export type {
   AnalysisDetail,
