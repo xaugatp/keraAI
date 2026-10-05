@@ -1,6 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ViewTab } from '../types';
 import { ASSETS } from '../data/mockData';
+import { useHealth } from '../hooks/useHealth';
+import type { HealthStatus } from '../hooks/useHealth';
+import { useModels } from '../hooks/useModels';
+
+// Real server state for the status pill (replaces the former hard-coded "Ready (42ms)").
+const HEALTH_STYLE: Record<HealthStatus, { label: string; dot: string; ping: boolean; pill: string }> = {
+  checking: { label: 'API: Checking…', dot: 'bg-[#6d7a72]', ping: false, pill: 'bg-[#f2f3ff] border-[#dae2fd]' },
+  ok: { label: 'API: Ready', dot: 'bg-[#006948]', ping: true, pill: 'bg-[#f2f3ff] border-[#dae2fd]' },
+  degraded: { label: 'API: Degraded', dot: 'bg-[#a36700]', ping: false, pill: 'bg-[#ffeed2] border-[#ffb95f]' },
+  offline: { label: 'API: Offline', dot: 'bg-[#ba1a1a]', ping: false, pill: 'bg-[#ffdad6] border-[#ba1a1a]/30' },
+};
+
+const DEMO_WEIGHTS_TITLE = 'Results come from placeholder weights and are not real predictions';
 
 interface HeaderProps {
   currentTab: ViewTab;
@@ -9,6 +22,23 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ currentTab, onNavigate }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const health = useHealth();
+  const { anyPlaceholder, error: modelsError, reload: reloadModels } = useModels();
+
+  // If the model list failed to load because the server was down, retry once it is reachable.
+  useEffect(() => {
+    if (health.status === 'ok' && modelsError) reloadModels();
+  }, [health.status]); // re-run only on status changes, not on every failed reload
+
+  const healthStyle = HEALTH_STYLE[health.status];
+  const healthTitle =
+    health.status === 'ok'
+      ? 'KeraAI server is ready'
+      : health.status === 'degraded'
+        ? `KeraAI server is degraded${health.failing.length ? ` — not ready: ${health.failing.join(', ')}` : ''}`
+        : health.status === 'offline'
+          ? 'Cannot reach the KeraAI server. It may be offline.'
+          : 'Checking the KeraAI server…';
 
   const navLinks: { id: ViewTab; label: string }[] = [
     { id: 'home', label: 'Home' },
@@ -84,13 +114,32 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onNavigate }) => {
 
         {/* Right Status & Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-full bg-[#f2f3ff] border border-[#dae2fd]">
+          {anyPlaceholder && (
+            <span
+              role="note"
+              title={DEMO_WEIGHTS_TITLE}
+              aria-label={DEMO_WEIGHTS_TITLE}
+              className="hidden lg:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#ffeed2] border border-[#ffb95f] font-mono text-[11px] font-bold text-[#825100] whitespace-nowrap cursor-help"
+            >
+              <span className="material-symbols-outlined text-[14px]">science</span>
+              Demo weights
+            </span>
+          )}
+
+          <div
+            role="status"
+            title={healthTitle}
+            aria-label={healthTitle}
+            className={`hidden lg:flex items-center gap-2 px-3 py-1 rounded-full border ${healthStyle.pill}`}
+          >
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#006948] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#006948]"></span>
+              {healthStyle.ping && (
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${healthStyle.dot} opacity-75`}></span>
+              )}
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${healthStyle.dot}`}></span>
             </span>
             <span className="font-mono text-[11px] font-medium text-[#3d4a42] whitespace-nowrap">
-              FastAPI: Ready (42ms)
+              {healthStyle.label}
             </span>
           </div>
 
@@ -137,10 +186,29 @@ export const Header: React.FC<HeaderProps> = ({ currentTab, onNavigate }) => {
               {link.label}
             </button>
           ))}
-          <div className="pt-2 flex items-center gap-2 font-mono text-xs text-[#3d4a42]">
-            <span className="w-2 h-2 rounded-full bg-[#006948]"></span>
-            FastAPI Tensor Core: Online (42ms)
+          <div
+            role="status"
+            title={healthTitle}
+            aria-label={healthTitle}
+            className="pt-2 flex items-center gap-2 font-mono text-xs text-[#3d4a42]"
+          >
+            <span className={`w-2 h-2 rounded-full ${healthStyle.dot}`}></span>
+            {healthStyle.label}
+            {health.status === 'degraded' && health.failing.length > 0 && (
+              <span className="text-[#825100]">({health.failing.join(', ')})</span>
+            )}
           </div>
+          {anyPlaceholder && (
+            <div
+              role="note"
+              title={DEMO_WEIGHTS_TITLE}
+              aria-label={DEMO_WEIGHTS_TITLE}
+              className="flex items-center gap-1.5 font-mono text-xs font-bold text-[#825100]"
+            >
+              <span className="material-symbols-outlined text-[14px]">science</span>
+              Demo weights — results are not real predictions
+            </div>
+          )}
         </div>
       )}
     </header>

@@ -7,7 +7,9 @@
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit && tsc --noEmit -p tests",
+    "gen:api": "npx --yes --package=typescript@5.9.3 --package=openapi-typescript@7.13.0 -- openapi-typescript ../Backend/openapi.json -o src/api/schema.d.ts",
+    "test:api": "node --test --experimental-test-module-mocks \"tests/api/**/*.test.ts\""
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

@@ -14,8 +14,19 @@ import { DetectDiseaseView } from './views/DetectDiseaseView';
 import { LeafAnalysisView } from './views/LeafAnalysisView';
 import { AnalysisHistoryView } from './views/AnalysisHistoryView';
 import { AboutModelsView } from './views/AboutModelsView';
+import { AnalysisProvider } from './state/AnalysisContext';
 
+// The provider wraps the whole app so every view can call useAnalysisState().
+// AppShell (the former App body, unchanged) sits inside it so it can use the context too.
 export default function App() {
+  return (
+    <AnalysisProvider>
+      <AppShell />
+    </AnalysisProvider>
+  );
+}
+
+function AppShell() {
   const [currentTab, setCurrentTab] = useState<ViewTab>('home');
   const [stage1SampleMode, setStage1SampleMode] = useState<'positive' | 'negative'>('positive');
   const [selectedLeafIdx, setSelectedLeafIdx] = useState<number>(0);

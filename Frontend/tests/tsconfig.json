@@ -1,0 +1,10 @@
+{
+  // Type-checks the Node unit tests (and the src/api modules they import). Kept separate so the
+  // browser app's tsconfig does not pull Node's global types into UI code.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client"],
+    "noEmit": true
+  },
+  "include": ["../src/api", "./**/*.ts"]
+}

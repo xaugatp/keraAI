@@ -42,3 +42,9 @@ On Netlify, set the same variable in the site's environment settings.
 | `npm run lint`    | Type check (`tsc --noEmit`)                           |
 | `npm run build`   | Production build into `dist/`                         |
 | `npm run preview` | Serve the production build locally                    |
+| `npm run gen:api` | Regenerate `src/api/schema.d.ts` from `../Backend/openapi.json` (commit the result) |
+| `npm run test:api`| Node unit tests for `src/api` (`node --test`, no extra dependencies) |
+
+`gen:api` runs `openapi-typescript` through `npx` with its own pinned TypeScript 5.9: the project uses
+TypeScript 7, whose package no longer exposes the compiler API `openapi-typescript` needs (it declares
+a `typescript@^5` peer dependency), so it cannot be installed as a normal devDependency yet.
