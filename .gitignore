@@ -36,6 +36,7 @@ Backend/weights/*
 # --- App data (DATA_ROOT) ---
 DATA_ROOT/
 Backend/data/
+Backend/.dev-data/
 
 # --- OS / editor ---
 .DS_Store

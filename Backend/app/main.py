@@ -131,7 +131,10 @@ def create_app(engine: Engine | None = None, registry: ModelRegistry | None = No
         allow_origins=settings.cors_origins,
         allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "X-Client-Id", "X-Request-ID"],
-        expose_headers=["X-Request-ID", "Location"],
+        # Retry-After is exposed so a 429 response lets browser JS read the
+        # backoff time across origins (the Netlify app calling the tunnel) —
+        # without this, fetch()/XHR can see the header exists but not its value.
+        expose_headers=["X-Request-ID", "Location", "Retry-After"],
     )
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(SlowAPIMiddleware)

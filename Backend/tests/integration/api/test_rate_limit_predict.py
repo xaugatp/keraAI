@@ -102,6 +102,18 @@ def test_default_limit_allows_normal_use(api: TestClient, client_id: uuid.UUID) 
     assert_problem(post_image(api, TREE_URL, client_id), 429, "RATE_LIMITED")
 
 
+def test_retry_after_is_exposed_cross_origin(make_client: MakeClient, client_id: uuid.UUID) -> None:
+    # CORS hides response headers from browser JS unless they are listed in
+    # Access-Control-Expose-Headers — without it, fetch()/XHR on the Netlify
+    # origin could see a 429 but never read its Retry-After backoff value.
+    client = make_client(RATE_LIMIT_PREDICT="1/minute")
+    response = post_image(
+        client, TREE_URL, client_id, extra_headers={"Origin": "http://localhost:3000"}
+    )
+    exposed = response.headers["access-control-expose-headers"]
+    assert "Retry-After" in exposed
+
+
 def test_rate_limit_headers_are_not_duplicated(
     make_client: MakeClient, client_id: uuid.UUID
 ) -> None:
