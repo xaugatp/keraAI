@@ -18,7 +18,8 @@ router = APIRouter(tags=["models"])
     responses=problem_responses(500),
 )
 async def list_models(registry: Registry) -> list[ModelInfoOut]:
-    """Includes planned models (status `unavailable`) so the UI can show "coming soon".
+    """All three models are built; `status: unavailable` means one failed to load at startup
+    (missing weights, bad checkpoint), not a future model.
 
     A pure in-memory read, so it runs on the event loop without a threadpool hop.
     """

@@ -18,15 +18,16 @@ const SCOPE_TABS: { id: Scope; label: string }[] = [
 ];
 
 const MODEL_TABS: { id: ModelKey | 'all'; label: string }[] = [
-  { id: 'all', label: 'Both Models' },
+  { id: 'all', label: 'All Models' },
   { id: 'tree_classification', label: 'Model 1 · Tree' },
   { id: 'leaf_segmentation', label: 'Model 2 · Leaf' },
+  { id: 'leaf_disease', label: 'Model 3 · Disease' },
 ];
 
 // Models with a detail page to open into (this is a saved row, not a fresh photo — it always
-// opens read-only, via AnalysisDetailView, never the live DetectionWorkspaceView/LeafAnalysisView
-// workspaces). leaf_disease has no results yet, so it is left out.
-const VIEWABLE_MODELS = new Set<ModelKey>(['tree_classification', 'leaf_segmentation']);
+// opens read-only, via AnalysisDetailView, never the live DetectionWorkspaceView/LeafAnalysisView/
+// LeafDiseaseView workspaces).
+const VIEWABLE_MODELS = new Set<ModelKey>(['tree_classification', 'leaf_segmentation', 'leaf_disease']);
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {

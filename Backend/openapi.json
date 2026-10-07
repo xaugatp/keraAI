@@ -24,6 +24,7 @@
               {
                 "discriminator": {
                   "mapping": {
+                    "leaf_disease": "#/components/schemas/LeafDiseaseDetails",
                     "leaf_segmentation": "#/components/schemas/LeafSegDetails",
                     "tree_classification": "#/components/schemas/TreeDetails"
                   },
@@ -35,6 +36,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/LeafSegDetails"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LeafDiseaseDetails"
                   }
                 ]
               },
@@ -246,6 +250,85 @@
         "title": "AnalysisSummary",
         "type": "object"
       },
+      "Body_predict_leaf_disease_api_v1_leaf_disease_predict_post": {
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ISO-8601 capture time; a time without an offset is read as UTC",
+            "title": "Captured At"
+          },
+          "gps_accuracy_m": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "GPS accuracy in metres",
+            "title": "Gps Accuracy M"
+          },
+          "image": {
+            "contentMediaType": "application/octet-stream",
+            "description": "Photo to analyse (JPEG, PNG or WEBP)",
+            "title": "Image",
+            "type": "string"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Degrees, -90..90",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Degrees, -180..180",
+            "title": "Longitude"
+          },
+          "source": {
+            "default": "upload",
+            "description": "Where the photo came from",
+            "enum": [
+              "upload",
+              "camera"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "Body_predict_leaf_disease_api_v1_leaf_disease_predict_post",
+        "type": "object"
+      },
       "Body_predict_leaf_segmentation_api_v1_leaf_segmentation_predict_post": {
         "properties": {
           "captured_at": {
@@ -404,6 +487,57 @@
         "title": "Body_predict_tree_api_v1_tree_predict_post",
         "type": "object"
       },
+      "DiseaseChannelMetrics": {
+        "description": "Per-disease-channel measurements, one of these per entry in `LeafDiseaseDetails.diseases`.",
+        "properties": {
+          "area_pct_of_leaf": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Area Pct Of Leaf",
+            "type": "number"
+          },
+          "channel": {
+            "enum": [
+              "black_sigatoka",
+              "yellow_sigatoka"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "largest_lesion_pct_of_leaf": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Largest Lesion Pct Of Leaf",
+            "type": "number"
+          },
+          "lesion_count": {
+            "minimum": 0.0,
+            "title": "Lesion Count",
+            "type": "integer"
+          },
+          "mean_probability": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Probability"
+          }
+        },
+        "required": [
+          "channel",
+          "area_pct_of_leaf",
+          "lesion_count",
+          "largest_lesion_pct_of_leaf"
+        ],
+        "title": "DiseaseChannelMetrics",
+        "type": "object"
+      },
       "GeoLocation": {
         "description": "Where and when the photo was taken, as reported by the client's device.\n\nEvery field is optional because the client may send any subset; the whole\nblock is ``null`` on an analysis when it sent none of them.",
         "properties": {
@@ -514,6 +648,126 @@
           "thumbnail_url"
         ],
         "title": "ImageLinks",
+        "type": "object"
+      },
+      "LeafDiseaseDetails": {
+        "properties": {
+          "diagnosis": {
+            "enum": [
+              "healthy",
+              "black_sigatoka",
+              "yellow_sigatoka",
+              "no_leaf"
+            ],
+            "title": "Diagnosis",
+            "type": "string"
+          },
+          "diseases": {
+            "items": {
+              "$ref": "#/components/schemas/DiseaseChannelMetrics"
+            },
+            "title": "Diseases",
+            "type": "array"
+          },
+          "kind": {
+            "const": "leaf_disease",
+            "title": "Kind",
+            "type": "string"
+          },
+          "leaf_area_pct_of_image": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Leaf Area Pct Of Image",
+            "type": "number"
+          },
+          "mean_leaf_probability": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Leaf Probability"
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/LeafDiseaseThresholds"
+          }
+        },
+        "required": [
+          "kind",
+          "diagnosis",
+          "leaf_area_pct_of_image",
+          "diseases",
+          "thresholds"
+        ],
+        "title": "LeafDiseaseDetails",
+        "type": "object"
+      },
+      "LeafDiseaseThresholds": {
+        "description": "The exact policy that produced a result, echoed so a stored row is reproducible.",
+        "properties": {
+          "black_sigatoka": {
+            "description": "p(black_sigatoka) >= this -> affected pixel",
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Black Sigatoka",
+            "type": "number"
+          },
+          "leaf": {
+            "description": "p(leaf) >= this -> leaf pixel",
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Leaf",
+            "type": "number"
+          },
+          "min_disease_pct": {
+            "description": "a disease's share of the leaf (%) below which it is ignored",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Min Disease Pct",
+            "type": "number"
+          },
+          "min_leaf_pct": {
+            "description": "leaf share of the image (%) below which the result is 'no_leaf'",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Min Leaf Pct",
+            "type": "number"
+          },
+          "min_lesion_pct": {
+            "description": "lesion blobs smaller than this % of the leaf area are dropped",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Min Lesion Pct",
+            "type": "number"
+          },
+          "tta_hflip": {
+            "description": "probabilities averaged with the horizontally flipped pass",
+            "title": "Tta Hflip",
+            "type": "boolean"
+          },
+          "yellow_sigatoka": {
+            "description": "p(yellow_sigatoka) >= this -> affected pixel",
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Yellow Sigatoka",
+            "type": "number"
+          }
+        },
+        "required": [
+          "leaf",
+          "black_sigatoka",
+          "yellow_sigatoka",
+          "min_leaf_pct",
+          "min_lesion_pct",
+          "min_disease_pct",
+          "tta_hflip"
+        ],
+        "title": "LeafDiseaseThresholds",
         "type": "object"
       },
       "LeafSegDetails": {
@@ -1455,6 +1709,128 @@
         ]
       }
     },
+    "/api/v1/leaf-disease/predict": {
+      "post": {
+        "operationId": "predict_leaf_disease_api_v1_leaf_disease_predict_post",
+        "parameters": [
+          {
+            "description": "Anonymous per-device UUID v4 generated by the frontend (D-04).",
+            "in": "header",
+            "name": "X-Client-Id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "X-Client-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_predict_leaf_disease_api_v1_leaf_disease_predict_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisDetail"
+                }
+              }
+            },
+            "description": "Analysis created and stored.",
+            "headers": {
+              "Location": {
+                "description": "Relative URL of the new analysis (GET it for later).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Bad request: missing/invalid X-Client-Id, or the image is invalid or too small."
+          },
+          "413": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The upload exceeds the size limit."
+          },
+          "415": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The image format is not supported."
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Validation error"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Rate limit exceeded; see the Retry-After header."
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unexpected server error or the model failed during inference."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "The model or the database is currently unavailable."
+          }
+        },
+        "summary": "Identify healthy vs. diseased leaf tissue, and the disease type",
+        "tags": [
+          "leaf disease"
+        ]
+      }
+    },
     "/api/v1/leaf-segmentation/predict": {
       "post": {
         "operationId": "predict_leaf_segmentation_api_v1_leaf_segmentation_predict_post",
@@ -1579,7 +1955,7 @@
     },
     "/api/v1/models": {
       "get": {
-        "description": "Includes planned models (status `unavailable`) so the UI can show \"coming soon\".\n\nA pure in-memory read, so it runs on the event loop without a threadpool hop.",
+        "description": "All three models are built; `status: unavailable` means one failed to load at startup\n(missing weights, bad checkpoint), not a future model.\n\nA pure in-memory read, so it runs on the event loop without a threadpool hop.",
         "operationId": "list_models_api_v1_models_get",
         "responses": {
           "200": {

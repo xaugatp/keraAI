@@ -28,6 +28,8 @@ export type ModelInfo = Schemas['ModelInfoOut'];
 
 export type TreeDetails = Schemas['TreeDetails'];
 export type LeafSegDetails = Schemas['LeafSegDetails'];
+export type LeafDiseaseDetails = Schemas['LeafDiseaseDetails'];
+export type DiseaseChannelMetrics = Schemas['DiseaseChannelMetrics'];
 /** `AnalysisDetail.details` without the `null` (a failed row has `details === null`). */
 export type AnalysisDetails = NonNullable<AnalysisDetail['details']>;
 export type Prediction = Schemas['Prediction'];
@@ -37,14 +39,15 @@ export type TimingsMs = Schemas['TimingsMs'];
 export type GeoLocation = Schemas['GeoLocation'];
 export type TreeProbability = Schemas['TreeProbability'];
 export type LeafSegThresholds = Schemas['LeafSegThresholds'];
+export type LeafDiseaseThresholds = Schemas['LeafDiseaseThresholds'];
 /** RFC 9457 error body (`application/problem+json`). */
 export type ProblemDetail = Schemas['ProblemDetail'];
 
 // --- Enumerations ----------------------------------------------------------------------------
 
 export type ModelKey = AnalysisDetail['model_key']; // 'tree_classification' | 'leaf_segmentation' | 'leaf_disease'
-/** Models that have a `/predict` route today (Model 3 is "coming soon"). */
-export type PredictModelKey = Exclude<ModelKey, 'leaf_disease'>;
+/** All three models have a `/predict` route. */
+export type PredictModelKey = ModelKey;
 /** Where a stored analysis came from. `'sample'` rows are the public pre-computed samples. */
 export type AnalysisSource = AnalysisDetail['source']; // 'upload' | 'camera' | 'sample'
 /** What the client may send as `source` on predict (a client can never create a 'sample'). */
@@ -69,6 +72,13 @@ export type Variant = NonNullable<ImageQuery['variant']>;
  */
 export type LeafSegLabel = 'affected' | 'healthy' | 'no_leaf';
 
+/**
+ * Leaf-disease diagnoses. NOT in the OpenAPI schema (`Prediction.label` is a plain
+ * `string | null`); this is the Model 3 contract from ADR 0019. Treat any other string
+ * defensively.
+ */
+export type LeafDiseaseLabel = 'black_sigatoka' | 'yellow_sigatoka' | 'healthy' | 'no_leaf';
+
 // --- Type guards -----------------------------------------------------------------------------
 
 /**
@@ -84,4 +94,11 @@ export function isLeafSegDetails(
   details: AnalysisDetail['details'] | undefined,
 ): details is LeafSegDetails {
   return details != null && details.kind === 'leaf_segmentation';
+}
+
+/** Narrow `analysis.details` to the leaf-disease shape (false for `null`/`undefined`). */
+export function isLeafDiseaseDetails(
+  details: AnalysisDetail['details'] | undefined,
+): details is LeafDiseaseDetails {
+  return details != null && details.kind === 'leaf_disease';
 }

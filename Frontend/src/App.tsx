@@ -10,7 +10,7 @@ import { Footer } from './components/Footer';
 import { HomeView } from './views/HomeView';
 import { DetectionWorkspaceView } from './views/DetectionWorkspaceView';
 import { Stage1ResultView } from './views/Stage1ResultView';
-import { DetectDiseaseView } from './views/DetectDiseaseView';
+import { LeafDiseaseView } from './views/LeafDiseaseView';
 import { LeafAnalysisView } from './views/LeafAnalysisView';
 import { AnalysisHistoryView } from './views/AnalysisHistoryView';
 import { AnalysisDetailView } from './views/AnalysisDetailView';
@@ -72,7 +72,8 @@ function writeStoredTab(tab: ViewTab): void {
 
 function AppShell() {
   const [currentTab, setCurrentTab] = useState<ViewTab>(() => readStoredTab() ?? 'home');
-  const { tree, leaf, viewing, restoreTree, restoreLeaf, restoreViewing } = useAnalysisState();
+  const { tree, leaf, disease, viewing, restoreTree, restoreLeaf, restoreDisease, restoreViewing } =
+    useAnalysisState();
 
   const handleNavigate = (tab: ViewTab) => {
     setCurrentTab(tab);
@@ -80,18 +81,20 @@ function AppShell() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Reload lands back on the tab above, but `tree`/`leaf`/`viewing` start empty every page load (an
-  // AnalysisDetail is never itself persisted — only its id, see AnalysisContext). Re-fetch exactly
-  // the one piece of data the restored tab needs. This runs once, for the tab the page loaded with,
-  // not on every navigation — ordinary in-app navigation already carries fresh data via
-  // setTree/setLeaf/setViewing at the point of navigation. If the fetch fails (deleted record,
-  // backend unreachable), the slot just stays null and the view shows its normal "nothing selected"
-  // state rather than a crash.
+  // Reload lands back on the tab above, but `tree`/`leaf`/`disease`/`viewing` start empty every page
+  // load (an AnalysisDetail is never itself persisted — only its id, see AnalysisContext). Re-fetch
+  // exactly the one piece of data the restored tab needs. This runs once, for the tab the page
+  // loaded with, not on every navigation — ordinary in-app navigation already carries fresh data via
+  // setTree/setLeaf/setDisease/setViewing at the point of navigation. If the fetch fails (deleted
+  // record, backend unreachable), the slot just stays null and the view shows its normal "nothing
+  // selected" state rather than a crash.
   useEffect(() => {
     if ((currentTab === 'plant-result' || currentTab === 'stage1-result') && !tree) {
       restoreTree().catch(() => {});
     } else if ((currentTab === 'leaf-analysis' || currentTab === 'leaf-result') && !leaf) {
       restoreLeaf().catch(() => {});
+    } else if ((currentTab === 'detect-disease' || currentTab === 'leaf-detect') && !disease) {
+      restoreDisease().catch(() => {});
     } else if (currentTab === 'history-detail' && !viewing) {
       restoreViewing().catch(() => {});
     }
@@ -118,7 +121,7 @@ function AppShell() {
         )}
 
         {(currentTab === 'detect-disease' || currentTab === 'leaf-detect') && (
-          <DetectDiseaseView onNavigate={handleNavigate} />
+          <LeafDiseaseView onNavigate={handleNavigate} />
         )}
 
         {(currentTab === 'leaf-analysis' || currentTab === 'leaf-result') && (

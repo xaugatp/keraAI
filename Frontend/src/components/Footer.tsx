@@ -15,7 +15,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-2xl border border-[#dae2fd] flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-extrabold text-[#131b2e]">Research &amp; Demonstration Contact</h3>
+              <h3 className="text-base font-extrabold text-[#131b2e]">Contact</h3>
               <button
                 type="button"
                 onClick={() => setShowContactModal(false)}
@@ -25,14 +25,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               </button>
             </div>
             <p className="text-xs text-[#3d4a42] leading-relaxed">
-              This application was developed as a university demonstration of computer vision models
-              for agricultural botanical pathology. For questions regarding the dual-stage ResNet-50
-              and U-Net deployment or dataset citations:
+              KeraAI is a computer vision project for banana farming, built around three trained
+              models (tree classification, leaf segmentation and leaf disease identification). For
+              questions about the models, the dataset, or piloting this on a farm:
             </p>
             <div className="p-3 bg-[#f2f3ff] rounded-xl border border-[#dae2fd] flex flex-col gap-1 text-xs font-mono">
-              <span className="text-[#3d4a42]">Lead Researcher: Saugat Poudel</span>
+              <span className="text-[#3d4a42]">Saugat Poudel</span>
               <span className="text-[#006948] font-bold">saugat.poudel@radicalsystems.com.au</span>
-              <span className="text-[#3d4a42]">Faculty of Agricultural Sciences &amp; Computer Vision</span>
             </div>
             <button
               type="button"
@@ -48,15 +47,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
       <div className="max-w-7xl mx-auto px-6 lg:px-12 py-8 flex flex-col md:flex-row items-center justify-between gap-6 text-[#3d4a42]">
         <div className="flex flex-col items-center md:items-start gap-1">
           <div className="flex items-center gap-2">
-            <span className="font-extrabold text-sm text-[#131b2e]">BananaVision AI</span>
-            <span className="text-xs text-[#bccac0]">&bull;</span>
-            <span className="font-mono text-xs text-[#006948] font-semibold">KERA AI</span>
+            <span className="font-mono text-sm text-[#006948] font-bold">KERA AI</span>
             <span className="px-2 py-0.5 rounded-full bg-[#eaedff] font-mono text-[10px] text-[#3d4a42] border border-[#dae2fd]">
-              Computer Vision Project
+              Computer Vision for Banana Farming
             </span>
           </div>
           <p className="text-xs text-[#3d4a42] text-center md:text-left max-w-xl">
-            Two-stage deep learning platform for real-time Musa classification and semantic foliar disease segmentation.
+            Three trained models for banana tree identification and leaf health, from a single photo.
           </p>
         </div>
 
@@ -70,7 +67,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
           </button>
           <a
             className="hover:text-[#006948] transition-colors flex items-center gap-1.5"
-            href="https://github.com/academic-vision/kera-ai"
+            href="https://github.com/xaugatp/keraAI"
             target="_blank"
             rel="noreferrer"
           >
@@ -89,10 +86,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 lg:px-12 pb-6 text-center md:text-left border-t border-[#dae2fd]/40 pt-4">
-        <p className="text-[11px] text-[#3d4a42]/80">
-          &copy; 2024–2026 BananaVision AI / KERA AI Academic Project. Distributed under MIT License
-          for non-commercial botanical disease diagnosis research.
-        </p>
+        <p className="text-[11px] text-[#3d4a42]/80">&copy; 2024–2026 KeraAI. All rights reserved.</p>
       </div>
     </footer>
   );

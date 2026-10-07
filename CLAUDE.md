@@ -8,9 +8,9 @@ frontend shows the result plus a browsable history.
 
 | # | Model key            | Purpose                                         | Arch          | Status       |
 |---|----------------------|-------------------------------------------------|---------------|--------------|
-| 1 | `tree_classification`| Banana tree vs non-banana tree                  | YOLOv8-cls    | **Building** |
-| 2 | `leaf_segmentation`  | Separate healthy green tissue vs damaged tissue | U-Net-type    | Planned      |
-| 3 | `leaf_disease`       | Healthy vs diseased leaf (+ disease type)       | U-Net-type    | Planned      |
+| 1 | `tree_classification`| Banana tree vs non-banana tree                  | YOLOv8-cls    | **Built, real weights** |
+| 2 | `leaf_segmentation`  | Separate healthy green tissue vs damaged tissue | U-Net-type    | **Built, real weights** |
+| 3 | `leaf_disease`       | Healthy vs diseased leaf (+ disease type)       | U-Net-type    | **Built, real weights** |
 
 Runtime topology:
 ```
@@ -21,7 +21,7 @@ Browser/phone → Netlify (React app) → Cloudflare Tunnel → FastAPI on owner
 
 ## Repository layout
 ```
-/Frontend   React 19 + Vite + Tailwind (currently uses mock data in src/data/mockData.ts)
+/Frontend   React 19 + Vite + Tailwind, wired to the real FastAPI backend (src/api/); src/data/mockData.ts now holds only static image assets and real dataset metadata, not mock predictions
 /Backend    FastAPI service — FULL BUILD SPEC: Backend/docs/BACKEND_SPEC.md
 CLAUDE.md   this file
 ```

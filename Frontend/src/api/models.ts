@@ -1,6 +1,7 @@
 /**
  * `GET /api/v1/models` — which models exist, their status and whether their weights are a
- * placeholder. Includes planned models (status `unavailable`) so the UI can show "coming soon".
+ * placeholder. All three models are built and `ready` today; `status: 'unavailable'` is reserved
+ * for a model that fails to load at startup (missing weights, bad checkpoint), not a future one.
  * No `X-Client-Id` needed (and omitting it avoids a CORS preflight).
  */
 import { API_PREFIX } from './config.ts';

@@ -29,7 +29,7 @@ export type { CapturedAtInputs } from './capturedAt.ts';
 export { shouldAutoSubmitHandoff } from './handoff.ts';
 export type { ShouldAutoSubmitHandoffInput } from './handoff.ts';
 export { withMinDuration } from './minDuration.ts';
-export { isLeafSegDetails, isTreeDetails } from './types.ts';
+export { isLeafDiseaseDetails, isLeafSegDetails, isTreeDetails } from './types.ts';
 export type {
   AnalysisDetail,
   AnalysisDetails,
@@ -37,8 +37,12 @@ export type {
   AnalysisStatus,
   AnalysisSummary,
   AnalysisSummaryPage,
+  DiseaseChannelMetrics,
   GeoLocation,
   ImageLinks,
+  LeafDiseaseDetails,
+  LeafDiseaseLabel,
+  LeafDiseaseThresholds,
   LeafSegDetails,
   LeafSegLabel,
   LeafSegThresholds,

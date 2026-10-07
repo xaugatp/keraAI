@@ -14,10 +14,11 @@ import { getClientId } from './clientId.ts';
 import { AbortedError, ApiError, NetworkError, parseApiError } from './errors.ts';
 import type { AnalysisDetail, PredictModelKey, UploadSource } from './types.ts';
 
-/** Predict route per model (relative to `API_PREFIX`). Model 3 has no route yet. */
+/** Predict route per model (relative to `API_PREFIX`). */
 export const PREDICT_ROUTES: Record<PredictModelKey, string> = {
   tree_classification: '/tree/predict',
   leaf_segmentation: '/leaf-segmentation/predict',
+  leaf_disease: '/leaf-disease/predict',
 };
 
 export interface PredictInput {

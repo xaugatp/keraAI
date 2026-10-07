@@ -13,8 +13,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ViewTab } from '../types';
 import { useAnalysisState } from '../state/AnalysisContext';
 import { useModels } from '../hooks/useModels';
-import { absoluteImageUrl, getAnalysis, isLeafSegDetails, isTreeDetails } from '../api';
-import type { AnalysisDetail, LeafSegLabel, ModelInfo, TreeVerdict } from '../api';
+import { absoluteImageUrl, getAnalysis, isLeafDiseaseDetails, isLeafSegDetails, isTreeDetails } from '../api';
+import type { AnalysisDetail, LeafDiseaseLabel, LeafSegLabel, ModelInfo, TreeVerdict } from '../api';
 
 interface AnalysisDetailViewProps {
   onNavigate: (tab: ViewTab) => void;
@@ -627,6 +627,300 @@ function LeafResultBody({ analysis, modelInfo }: { analysis: AnalysisDetail; mod
   );
 }
 
+// --- Model 3: leaf disease identification ----------------------------------------------------
+
+const DISEASE_LABEL_STYLE: Record<
+  LeafDiseaseLabel,
+  { icon: string; bannerClass: string; cardBorder: string; title: string; description: string }
+> = {
+  black_sigatoka: {
+    icon: 'warning',
+    bannerClass: 'bg-[#ffdad6] border border-[#ba1a1a]/30 text-[#ba1a1a]',
+    cardBorder: 'border-[#ffdad6]',
+    title: 'Black Sigatoka Detected',
+    description: 'This leaf shows signs of Black Sigatoka.',
+  },
+  yellow_sigatoka: {
+    icon: 'warning',
+    bannerClass: 'bg-[#ffeed2] border border-[#ffb95f]/60 text-[#825100]',
+    cardBorder: 'border-[#ffeed2]',
+    title: 'Yellow Sigatoka Detected',
+    description: 'This leaf shows signs of Yellow Sigatoka.',
+  },
+  healthy: {
+    icon: 'check_circle',
+    bannerClass: 'bg-[#85f8c4]/30 border border-[#85f8c4] text-[#002114]',
+    cardBorder: 'border-[#dae2fd]',
+    title: 'Healthy Leaf',
+    description: 'No disease above the configured threshold was found on this leaf.',
+  },
+  no_leaf: {
+    icon: 'help',
+    bannerClass: 'bg-[#ffeed2] border border-[#ffb95f] text-[#5c3c00]',
+    cardBorder: 'border-[#ffb95f]/60',
+    title: 'No Banana Leaf Detected',
+    description: 'No banana leaf was detected in this photo.',
+  },
+};
+
+const DISEASE_CHANNEL_LABEL: Record<string, string> = {
+  black_sigatoka: 'Black Sigatoka',
+  yellow_sigatoka: 'Yellow Sigatoka',
+};
+
+function DiseaseResultBody({ analysis, modelInfo }: { analysis: AnalysisDetail; modelInfo: ModelInfo | undefined }) {
+  const { current, failed, onError } = useImageRetry(analysis);
+  const details = isLeafDiseaseDetails(current.details) ? current.details : null;
+  const rawLabel = current.prediction?.label ?? null;
+  const label: LeafDiseaseLabel | null =
+    rawLabel === 'black_sigatoka' || rawLabel === 'yellow_sigatoka' || rawLabel === 'healthy' || rawLabel === 'no_leaf'
+      ? rawLabel
+      : null;
+  const style = label ? DISEASE_LABEL_STYLE[label] : null;
+  const hasLeafTissue = label !== null && label !== 'no_leaf';
+  const originalUrl = absoluteImageUrl(current.image.original_url);
+  const resultUrl = absoluteImageUrl(current.image.result_url);
+
+  const [viewMode, setViewMode] = useState<'overlay' | 'original'>('overlay');
+  const [isSliderActive, setIsSliderActive] = useState(false);
+  const [splitPosition, setSplitPosition] = useState(50);
+  const sliderContainerRef = useRef<HTMLDivElement | null>(null);
+  const isDraggingRef = useRef(false);
+
+  const updateSplitFromClientX = useCallback((clientX: number) => {
+    const el = sliderContainerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const pct = Math.max(SPLIT_MIN, Math.min(SPLIT_MAX, ((clientX - rect.left) / rect.width) * 100));
+    setSplitPosition(pct);
+  }, []);
+  const handleSliderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    isDraggingRef.current = true;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    updateSplitFromClientX(e.clientX);
+  };
+  const handleSliderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    updateSplitFromClientX(e.clientX);
+  };
+  const handleSliderPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    isDraggingRef.current = false;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+  const handleSliderKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowLeft') {
+      setSplitPosition((p) => Math.max(SPLIT_MIN, p - SPLIT_KEY_STEP));
+      e.preventDefault();
+    } else if (e.key === 'ArrowRight') {
+      setSplitPosition((p) => Math.min(SPLIT_MAX, p + SPLIT_KEY_STEP));
+      e.preventDefault();
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      <div className="lg:col-span-7 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-[#dae2fd]">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-mono font-bold text-[#131b2e] uppercase">View:</span>
+            <div className="inline-flex p-1 rounded-lg bg-[#f2f3ff] border border-[#dae2fd] text-xs font-mono">
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode('overlay');
+                  setIsSliderActive(false);
+                }}
+                disabled={!resultUrl}
+                className={`px-2.5 py-1 rounded transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+                  viewMode === 'overlay' && !isSliderActive ? 'bg-[#006948] text-white font-bold shadow-sm' : 'text-[#3d4a42] hover:text-[#131b2e]'
+                }`}
+              >
+                Overlay
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode('original');
+                  setIsSliderActive(false);
+                }}
+                className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                  viewMode === 'original' && !isSliderActive ? 'bg-[#131b2e] text-white font-bold shadow-sm' : 'text-[#3d4a42] hover:text-[#131b2e]'
+                }`}
+              >
+                Original
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsSliderActive((v) => !v)}
+            disabled={!resultUrl}
+            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold flex items-center gap-1.5 border transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+              isSliderActive ? 'bg-[#00855d] text-white border-[#00855d]' : 'bg-[#eaedff] text-[#131b2e] border-[#dae2fd] hover:bg-[#dae2fd]'
+            }`}
+            title="Drag (or use the arrow keys) to compare the overlay against the original photo"
+          >
+            <span className="material-symbols-outlined text-[16px]">compare</span>
+            <span>Split Compare</span>
+          </button>
+        </div>
+
+        <div
+          ref={sliderContainerRef}
+          className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-[#131b2e] shadow-xl border border-[#dae2fd] select-none touch-none"
+        >
+          {!failed ? (
+            <>
+              <img alt="Original leaf photo" className="absolute inset-0 w-full h-full object-cover" src={originalUrl ?? undefined} onError={onError} />
+              {resultUrl && (
+                <img
+                  alt="Leaf disease overlay — green outlines the leaf, each disease shaded a different colour"
+                  className="absolute inset-0 w-full h-full object-cover"
+                  src={resultUrl}
+                  onError={onError}
+                  style={
+                    isSliderActive
+                      ? { clipPath: `inset(0 ${100 - splitPosition}% 0 0)` }
+                      : viewMode === 'overlay'
+                        ? undefined
+                        : { display: 'none' }
+                  }
+                />
+              )}
+              {isSliderActive && (
+                <div
+                  role="slider"
+                  tabIndex={0}
+                  aria-label="Comparison slider: overlay versus original photo"
+                  aria-orientation="horizontal"
+                  aria-valuemin={SPLIT_MIN}
+                  aria-valuemax={SPLIT_MAX}
+                  aria-valuenow={Math.round(splitPosition)}
+                  onPointerDown={handleSliderPointerDown}
+                  onPointerMove={handleSliderPointerMove}
+                  onPointerUp={handleSliderPointerUp}
+                  onPointerCancel={handleSliderPointerUp}
+                  onKeyDown={handleSliderKeyDown}
+                  style={{ left: `${splitPosition}%` }}
+                  className="absolute top-0 bottom-0 w-1 bg-white shadow-[0_0_14px_rgba(0,0,0,0.8)] cursor-ew-resize flex items-center justify-center z-30 touch-none focus:outline-none focus:ring-2 focus:ring-[#85f8c4]"
+                >
+                  <div className="w-8 h-8 rounded-full bg-white text-[#131b2e] flex items-center justify-center shadow-lg border border-[#bccac0]">
+                    <span className="material-symbols-outlined text-[18px]">drag_indicator</span>
+                  </div>
+                </div>
+              )}
+              {!resultUrl && (
+                <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur-md px-4 py-2 rounded-xl text-xs text-[#3d4a42] text-center">
+                  No overlay image is available for this result.
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-white/70">
+              <span className="material-symbols-outlined text-[36px]">broken_image</span>
+              <span className="text-sm">Image unavailable</span>
+            </div>
+          )}
+        </div>
+
+        {hasLeafTissue ? (
+          <div className="bg-white p-5 rounded-2xl border border-[#dae2fd] shadow-sm flex flex-col gap-3 font-mono">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#131b2e]">Disease Breakdown (% of leaf)</span>
+            {(details?.diseases ?? []).map((d) => (
+              <div key={d.channel} className="p-3 rounded-xl bg-[#f2f3ff] border border-[#dae2fd] flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#131b2e]">{DISEASE_CHANNEL_LABEL[d.channel] ?? d.channel}</span>
+                  <span className="text-sm font-extrabold text-[#131b2e]">{fmtPct(d.area_pct_of_leaf)}</span>
+                </div>
+                <div className="flex justify-between text-[11px] text-[#3d4a42]">
+                  <span>Lesion count: {d.lesion_count}</span>
+                  <span>Largest lesion: {fmtPct(d.largest_lesion_pct_of_leaf)}</span>
+                  <span>Mean probability: {fmtProbability(d.mean_probability)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          label === 'no_leaf' && (
+            <div className="bg-white p-5 rounded-2xl border border-[#ffb95f]/60 shadow-sm text-sm text-[#5c3c00]">
+              No disease breakdown is shown because the model could not find enough leaf area in this photo.
+            </div>
+          )
+        )}
+      </div>
+
+      <div className="lg:col-span-5 flex flex-col gap-6">
+        <div className={`bg-white p-7 rounded-2xl shadow-sm border ${style?.cardBorder ?? 'border-[#dae2fd]'} flex flex-col gap-6`}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#006948]">
+              Leaf Disease Result
+            </span>
+            <PlaceholderChip modelInfo={modelInfo} />
+          </div>
+
+          <div className={`flex items-center gap-3 p-3.5 rounded-xl ${style?.bannerClass ?? 'bg-[#eaedff] border border-[#dae2fd] text-[#131b2e]'}`}>
+            <span className="material-symbols-outlined text-[26px]">{style?.icon ?? 'help'}</span>
+            <span className="text-base font-extrabold tracking-tight">{style?.title ?? 'Result unavailable'}</span>
+          </div>
+          <p className="text-xs text-[#3d4a42] leading-relaxed -mt-3">
+            {style?.description ?? 'This analysis did not return a recognised result.'}
+          </p>
+
+          <div className="p-4 rounded-xl bg-[#f2f3ff] border border-[#dae2fd] flex flex-col gap-2 font-mono text-xs">
+            <span className="text-[10px] uppercase font-bold text-[#3d4a42] tracking-wider">Measurements</span>
+            <div className="flex justify-between py-1 border-b border-[#dae2fd]">
+              <span className="text-[#3d4a42]">Leaf coverage of photo:</span>
+              <span className="font-bold text-[#131b2e]">{fmtPct(details?.leaf_area_pct_of_image)}</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-[#3d4a42]">Mean leaf probability:</span>
+              <span className="font-bold text-[#131b2e]">{fmtProbability(details?.mean_leaf_probability)}</span>
+            </div>
+          </div>
+
+          {details && (
+            <details className="rounded-xl bg-[#faf8ff] border border-[#dae2fd] p-4 text-xs font-mono">
+              <summary className="cursor-pointer font-bold text-[#131b2e] uppercase tracking-wider text-[10px]">
+                Thresholds used
+              </summary>
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 mt-3 text-[#3d4a42]">
+                <span>Leaf pixel threshold:</span>
+                <span className="text-right font-bold text-[#131b2e]">{fmtProbability(details.thresholds.leaf)}</span>
+                <span>Black Sigatoka threshold:</span>
+                <span className="text-right font-bold text-[#131b2e]">{fmtProbability(details.thresholds.black_sigatoka)}</span>
+                <span>Yellow Sigatoka threshold:</span>
+                <span className="text-right font-bold text-[#131b2e]">{fmtProbability(details.thresholds.yellow_sigatoka)}</span>
+                <span>Min. leaf % (else no_leaf):</span>
+                <span className="text-right font-bold text-[#131b2e]">{fmtPct(details.thresholds.min_leaf_pct)}</span>
+                <span>Min. disease % (else healthy):</span>
+                <span className="text-right font-bold text-[#131b2e]">{fmtPct(details.thresholds.min_disease_pct)}</span>
+                <span>Min. lesion size %:</span>
+                <span className="text-right font-bold text-[#131b2e]">{fmtPct(details.thresholds.min_lesion_pct)}</span>
+                <span>Horizontal-flip TTA:</span>
+                <span className="text-right font-bold text-[#131b2e]">{details.thresholds.tta_hflip ? 'Yes' : 'No'}</span>
+              </div>
+            </details>
+          )}
+
+          <div className="p-4 rounded-xl bg-[#f2f3ff] border border-[#dae2fd] flex flex-col gap-2 font-mono text-xs">
+            <span className="text-[10px] uppercase font-bold text-[#3d4a42] tracking-wider">Model &amp; Timing</span>
+            <div className="flex justify-between py-1 border-b border-[#dae2fd]">
+              <span className="text-[#3d4a42]">Model version:</span>
+              <span className="font-bold text-[#131b2e]">{current.model_version}</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-[#3d4a42]">Total time:</span>
+              <span className="font-bold text-[#006948]">{fmtMs(current.timings_ms.total)}</span>
+            </div>
+          </div>
+
+          <RecordMeta analysis={current} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Entry point -----------------------------------------------------------------------------
 
 export const AnalysisDetailView: React.FC<AnalysisDetailViewProps> = ({ onNavigate }) => {
@@ -660,6 +954,8 @@ export const AnalysisDetailView: React.FC<AnalysisDetailViewProps> = ({ onNaviga
         <LeafResultBody key={viewing.id} analysis={viewing} modelInfo={byKey.leaf_segmentation} />
       ) : viewing.model_key === 'tree_classification' ? (
         <TreeResultBody key={viewing.id} analysis={viewing} modelInfo={byKey.tree_classification} />
+      ) : viewing.model_key === 'leaf_disease' ? (
+        <DiseaseResultBody key={viewing.id} analysis={viewing} modelInfo={byKey.leaf_disease} />
       ) : (
         <div className="p-6 rounded-2xl bg-[#ffdad6] border border-[#ba1a1a]/30 text-[#ba1a1a] text-sm">
           This record's model ({viewing.model_key}) has no detail view yet.

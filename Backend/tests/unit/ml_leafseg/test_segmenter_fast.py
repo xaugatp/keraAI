@@ -147,7 +147,7 @@ def test_predict_runs_the_whole_chain_and_fills_the_contract(
     assert out.details.kind == "leaf_segmentation"
     assert out.details.lesion_count == 1
     assert out.details.leaf_area_pct_of_image == pytest.approx(62.5, abs=1.0)  # 40 of 64 columns
-    assert out.details.thresholds.leaf == 0.5 and out.details.thresholds.affected == 0.85
+    assert out.details.thresholds.leaf == 0.5 and out.details.thresholds.affected == 0.90
     assert out.details.thresholds.tta_hflip is False
     assert out.result_image is not None
     assert out.result_image.mode == "RGB" and out.result_image.size == (640, 480)

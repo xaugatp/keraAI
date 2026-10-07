@@ -14,20 +14,20 @@ import {
   NetworkError,
   absoluteImageUrl,
   getAnalysis,
-  isLeafSegDetails,
+  isLeafDiseaseDetails,
   predict,
   resolveCapturedAt,
   shouldAutoSubmitHandoff,
   validateImageFile,
   withMinDuration,
 } from '../api';
-import type { AnalysisSummary, LeafSegLabel, UploadSource } from '../api';
+import type { AnalysisSummary, LeafDiseaseLabel, UploadSource } from '../api';
 
 // Samples are a single, near-instant DB read (no inference happens) — without a floor, the
 // ProcessingModal would flash and vanish, which reads as broken rather than fast.
 const SAMPLE_OPEN_MIN_MS = 900;
 
-interface LeafAnalysisViewProps {
+interface LeafDiseaseViewProps {
   onNavigate: (tab: ViewTab) => void;
 }
 
@@ -40,22 +40,29 @@ interface LocationInput {
 }
 
 const LABEL_STYLE: Record<
-  LeafSegLabel,
+  LeafDiseaseLabel,
   { icon: string; bannerClass: string; cardBorder: string; title: string; description: string }
 > = {
-  affected: {
+  black_sigatoka: {
     icon: 'warning',
     bannerClass: 'bg-[#ffdad6] border border-[#ba1a1a]/30 text-[#ba1a1a]',
     cardBorder: 'border-[#ffdad6]',
-    title: 'Affected Tissue Detected',
-    description: 'Damaged or diseased tissue was found on this leaf.',
+    title: 'Black Sigatoka Detected',
+    description: 'This leaf shows signs of Black Sigatoka.',
+  },
+  yellow_sigatoka: {
+    icon: 'warning',
+    bannerClass: 'bg-[#ffeed2] border border-[#ffb95f]/60 text-[#825100]',
+    cardBorder: 'border-[#ffeed2]',
+    title: 'Yellow Sigatoka Detected',
+    description: 'This leaf shows signs of Yellow Sigatoka.',
   },
   healthy: {
     icon: 'check_circle',
     bannerClass: 'bg-[#85f8c4]/30 border border-[#85f8c4] text-[#002114]',
     cardBorder: 'border-[#dae2fd]',
     title: 'Healthy Leaf',
-    description: 'No significant tissue damage was found on this leaf.',
+    description: 'No disease above the configured threshold was found on this leaf.',
   },
   no_leaf: {
     icon: 'help',
@@ -64,6 +71,11 @@ const LABEL_STYLE: Record<
     title: 'No Banana Leaf Detected',
     description: 'No banana leaf detected in this photo. Try a clearer, closer photo of a single leaf.',
   },
+};
+
+const DISEASE_CHANNEL_LABEL: Record<string, string> = {
+  black_sigatoka: 'Black Sigatoka',
+  yellow_sigatoka: 'Yellow Sigatoka',
 };
 
 function fmtPct(value: number | null | undefined, decimals = 1): string {
@@ -83,10 +95,10 @@ const SPLIT_MIN = 5;
 const SPLIT_MAX = 95;
 const SPLIT_KEY_STEP = 5;
 
-export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }) => {
-  const { leaf, tree, file, setLeaf } = useAnalysisState();
+export const LeafDiseaseView: React.FC<LeafDiseaseViewProps> = ({ onNavigate }) => {
+  const { disease, leaf, file, setDisease } = useAnalysisState();
   const { byKey } = useModels();
-  const { samples, loading: samplesLoading } = useSamples('leaf_segmentation');
+  const { samples, loading: samplesLoading } = useSamples('leaf_disease');
 
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -108,8 +120,8 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
 
   const [pageError, setPageError] = useState<string | null>(null);
 
-  // Guards the Stage-2 hand-off against re-submitting the same File on every re-render (see
-  // `shouldAutoSubmitHandoff`'s doc comment for why a ref, not just `file && !leaf`).
+  // Guards the hand-off against re-submitting the same File on every re-render (see
+  // `shouldAutoSubmitHandoff`'s doc comment for why a ref, not just `file && !disease`).
   const handoffFileRef = useRef<File | null>(null);
 
   // Overlay-vs-original comparison: a plain toggle, plus a drag/keyboard split slider that always
@@ -129,7 +141,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
   useEffect(() => {
     setImageFailed(false);
     setImageRetried(false);
-  }, [leaf?.id]);
+  }, [disease?.id]);
 
   useEffect(() => {
     return () => {
@@ -144,21 +156,21 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
   }, []);
 
   const handleImageError = useCallback(async () => {
-    if (!leaf || imageRetried || reloadingImage) {
+    if (!disease || imageRetried || reloadingImage) {
       setImageFailed(true);
       return;
     }
     setReloadingImage(true);
     try {
-      const fresh = await getAnalysis(leaf.id);
-      setLeaf(fresh);
+      const fresh = await getAnalysis(disease.id);
+      setDisease(fresh);
       setImageRetried(true);
     } catch {
       setImageFailed(true);
     } finally {
       setReloadingImage(false);
     }
-  }, [leaf, imageRetried, reloadingImage, setLeaf]);
+  }, [disease, imageRetried, reloadingImage, setDisease]);
 
   const submit = useCallback(
     async (
@@ -179,7 +191,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
 
       try {
         const detail = await predict(
-          'leaf_segmentation',
+          'leaf_disease',
           {
             file: photoFile,
             source,
@@ -202,7 +214,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
           },
         );
         setPhase('done');
-        setLeaf(detail);
+        setDisease(detail);
       } catch (error) {
         if (error instanceof AbortedError) {
           setPhase('idle');
@@ -214,25 +226,25 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
         abortControllerRef.current = null;
       }
     },
-    [setLeaf],
+    [setDisease],
   );
 
-  // Stage-2 hand-off: `file` is the SAME photo Model 1 just analysed. Submit it automatically,
-  // reusing the Stage 1 location, without making the user re-pick anything.
+  // Stage-3 hand-off: `file` is the SAME photo Model 2 (or Model 1) just analysed. Submit it
+  // automatically, reusing the earlier location, without making the user re-pick anything.
   useEffect(() => {
     if (!file) return;
-    if (!shouldAutoSubmitHandoff({ file, leaf, alreadySubmittedFile: handoffFileRef.current })) return;
+    if (!shouldAutoSubmitHandoff({ file, leaf: disease, alreadySubmittedFile: handoffFileRef.current })) return;
     handoffFileRef.current = file;
 
-    // tree.source can only be 'sample' when there is no original File to re-analyse, in which case
-    // Stage1ResultView never offers this hand-off — 'upload' is just a type-safe fallback.
-    const source: UploadSource = tree && tree.source !== 'sample' ? tree.source : 'upload';
-    const loc: LocationInput | null = tree?.location
+    // leaf.source can only be 'sample' when there is no original File to re-analyse, in which case
+    // LeafAnalysisView never offers this hand-off — 'upload' is just a type-safe fallback.
+    const source: UploadSource = leaf && leaf.source !== 'sample' ? leaf.source : 'upload';
+    const loc: LocationInput | null = leaf?.location
       ? {
-          latitude: tree.location.latitude ?? null,
-          longitude: tree.location.longitude ?? null,
-          accuracyM: tree.location.accuracy_m ?? null,
-          capturedAt: tree.location.captured_at ? new Date(tree.location.captured_at) : null,
+          latitude: leaf.location.latitude ?? null,
+          longitude: leaf.location.longitude ?? null,
+          accuracyM: leaf.location.accuracy_m ?? null,
+          capturedAt: leaf.location.captured_at ? new Date(leaf.location.captured_at) : null,
         }
       : null;
 
@@ -241,7 +253,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
     setPendingCapturedAt(null);
     setPendingLocation(loc);
     void submit(file, source, null, loc);
-  }, [file, leaf, tree, submit]);
+  }, [file, disease, leaf, submit]);
 
   const selectFile = useCallback(
     (pickedFile: File, source: UploadSource, capturedAt: string | null) => {
@@ -255,8 +267,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
       setPendingFile(pickedFile);
       setPendingSource(source);
       setPendingCapturedAt(capturedAt);
-      // Independent entry on this view has no GPS UI (see the report: the hand-off is the one
-      // path that carries a location; a standalone capture here is sent without one).
+      // Independent entry on this view has no GPS UI (same as Model 2's standalone capture path).
       setPendingLocation(null);
       void submit(pickedFile, source, capturedAt, null);
     },
@@ -306,7 +317,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
           SAMPLE_OPEN_MIN_MS,
         );
         setPhase('done');
-        setLeaf(detail);
+        setDisease(detail);
       } catch (error) {
         if (error instanceof AbortedError) {
           setPhase('idle');
@@ -318,7 +329,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
         abortControllerRef.current = null;
       }
     },
-    [setLeaf],
+    [setDisease],
   );
 
   const handleRetry = useCallback(() => {
@@ -364,18 +375,18 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
 
   // --- Derived view data -------------------------------------------------------------------------
 
-  const details = leaf && isLeafSegDetails(leaf.details) ? leaf.details : null;
-  const rawLabel = leaf?.prediction?.label ?? null;
-  const label: LeafSegLabel | null =
-    rawLabel === 'affected' || rawLabel === 'healthy' || rawLabel === 'no_leaf' ? rawLabel : null;
+  const details = disease && isLeafDiseaseDetails(disease.details) ? disease.details : null;
+  const rawLabel = disease?.prediction?.label ?? null;
+  const label: LeafDiseaseLabel | null =
+    rawLabel === 'black_sigatoka' || rawLabel === 'yellow_sigatoka' || rawLabel === 'healthy' || rawLabel === 'no_leaf'
+      ? rawLabel
+      : null;
   const style = label ? LABEL_STYLE[label] : null;
-  const modelInfo = byKey.leaf_segmentation;
+  const modelInfo = byKey.leaf_disease;
   const hasLeafTissue = label !== null && label !== 'no_leaf';
-  const healthyPct = details && hasLeafTissue ? Math.max(0, 100 - details.affected_area_pct_of_leaf) : null;
-  const affectedPct = details && hasLeafTissue ? details.affected_area_pct_of_leaf : null;
-  const originalUrl = leaf ? absoluteImageUrl(leaf.image.original_url) : null;
-  const resultUrl = leaf ? absoluteImageUrl(leaf.image.result_url) : null;
-  const hasPendingHandoff = file !== null && leaf === null;
+  const originalUrl = disease ? absoluteImageUrl(disease.image.original_url) : null;
+  const resultUrl = disease ? absoluteImageUrl(disease.image.result_url) : null;
+  const hasPendingHandoff = file !== null && disease === null;
 
   return (
     <div className="w-full max-w-7xl mx-auto px-6 lg:px-12 py-10 flex flex-col gap-8">
@@ -404,7 +415,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
       {/* Hidden File Upload Input */}
       <input
         ref={fileInputRef}
-        id="leaf-analysis-upload"
+        id="leaf-disease-upload"
         type="file"
         accept={ACCEPTED_IMAGE_TYPES.join(',')}
         className="sr-only"
@@ -415,19 +426,21 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
       <header className="flex flex-col gap-2 max-w-3xl">
         <div className="flex items-center gap-2 text-[#3d4a42] text-xs font-semibold tracking-wider uppercase font-mono">
           <button
+            type="button"
             onClick={() => onNavigate('home')}
             className="hover:text-[#006948] transition-colors cursor-pointer"
           >
             Home
           </button>
           <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-          <span className="text-[#006948] font-bold">Leaf Analysis</span>
+          <span className="text-[#006948] font-bold">Detect Disease</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold text-[#131b2e] tracking-tight">
-          Leaf Health Analysis
+          Leaf Disease Identification
         </h1>
         <p className="text-base text-[#3d4a42] leading-relaxed">
-          Model 2 measures how much of a banana leaf is healthy tissue versus affected tissue.
+          Model 3 tells a healthy banana leaf from one with Black Sigatoka or Yellow Sigatoka, and
+          localises each disease on the leaf itself.
         </p>
       </header>
 
@@ -475,7 +488,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
             <div>
               <h2 className="text-xl font-bold text-[#131b2e]">Use Camera</h2>
               <p className="text-xs text-[#3d4a42] mt-1">
-                Point your camera at a banana leaf for instant foliar segmentation.
+                Point your camera at a banana leaf to check it for disease.
               </p>
             </div>
 
@@ -538,7 +551,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
 
             {/* Dropzone — real drag-and-drop */}
             <label
-              htmlFor="leaf-analysis-upload"
+              htmlFor="leaf-disease-upload"
               onDragOver={(e) => {
                 e.preventDefault();
                 setDragActive(true);
@@ -600,12 +613,12 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
         </div>
       </div>
 
-      {/* RESULT STUDIO — driven entirely by useAnalysisState().leaf */}
-      {leaf && (
+      {/* RESULT STUDIO — driven entirely by useAnalysisState().disease */}
+      {disease && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-[#006948]">
-              Leaf Segmentation Result
+              Leaf Disease Result
             </span>
             {modelInfo?.is_placeholder && (
               <span
@@ -618,7 +631,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Left Column: Interactive Segmentation Studio Canvas (7 Cols) */}
+            {/* Left Column: Interactive Studio Canvas (7 Cols) */}
             <div className="lg:col-span-7 flex flex-col gap-4">
               {/* View toolbar */}
               <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-[#dae2fd]">
@@ -688,7 +701,7 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
                     />
                     {resultUrl && (
                       <img
-                        alt="Leaf segmentation overlay — green outlines the leaf, red marks affected tissue"
+                        alt="Leaf disease overlay — green outlines the leaf, each disease shaded a different colour"
                         className="absolute inset-0 w-full h-full object-cover"
                         src={resultUrl}
                         onError={() => void handleImageError()}
@@ -737,53 +750,37 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
                 )}
               </div>
 
-              {/* Area breakdown — real numbers from the server, only meaningful when a leaf was found */}
+              {/* Per-disease breakdown — real numbers from the server, only meaningful when a leaf was found */}
               {hasLeafTissue ? (
                 <div className="bg-white p-5 rounded-2xl border border-[#dae2fd] shadow-sm flex flex-col gap-3 font-mono">
                   <span className="text-xs font-bold uppercase tracking-wider text-[#131b2e]">
-                    Leaf Tissue Breakdown
+                    Disease Breakdown (% of leaf)
                   </span>
-                  <div className="w-full h-4 rounded-full overflow-hidden flex bg-[#dae2fd]">
+                  {(details?.diseases ?? []).map((d) => (
                     <div
-                      style={{ width: `${healthyPct ?? 0}%` }}
-                      className="bg-[#006948] h-full transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-white"
-                      title="Healthy"
+                      key={d.channel}
+                      className="p-3 rounded-xl bg-[#f2f3ff] border border-[#dae2fd] flex flex-col gap-1"
                     >
-                      {(healthyPct ?? 0) > 10 ? fmtPct(healthyPct, 0) : ''}
-                    </div>
-                    <div
-                      style={{ width: `${affectedPct ?? 0}%` }}
-                      className="bg-[#ba1a1a] h-full transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-white"
-                      title="Affected"
-                    >
-                      {(affectedPct ?? 0) > 10 ? fmtPct(affectedPct, 0) : ''}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <div className="p-3 rounded-xl bg-[#85f8c4]/20 border border-[#85f8c4] flex flex-col gap-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-[#006948] flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full bg-[#006948]" />
-                          Healthy
+                        <span className="text-xs font-bold text-[#131b2e]">
+                          {DISEASE_CHANNEL_LABEL[d.channel] ?? d.channel}
                         </span>
-                        <span className="text-sm font-extrabold text-[#006948]">{fmtPct(healthyPct)}</span>
+                        <span className="text-sm font-extrabold text-[#131b2e]">
+                          {fmtPct(d.area_pct_of_leaf)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-[#3d4a42]">
+                        <span>Lesion count: {d.lesion_count}</span>
+                        <span>Largest lesion: {fmtPct(d.largest_lesion_pct_of_leaf)}</span>
+                        <span>Mean probability: {fmtProbability(d.mean_probability)}</span>
                       </div>
                     </div>
-                    <div className="p-3 rounded-xl bg-[#ffdad6]/40 border border-[#ba1a1a]/30 flex flex-col gap-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-[#ba1a1a] flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full bg-[#ba1a1a]" />
-                          Affected
-                        </span>
-                        <span className="text-sm font-extrabold text-[#ba1a1a]">{fmtPct(affectedPct)}</span>
-                      </div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               ) : (
                 label === 'no_leaf' && (
                   <div className="bg-white p-5 rounded-2xl border border-[#ffb95f]/60 shadow-sm text-sm text-[#5c3c00]">
-                    No tissue breakdown is shown because the model could not find enough leaf area in
+                    No disease breakdown is shown because the model could not find enough leaf area in
                     this photo.
                   </div>
                 )
@@ -814,26 +811,10 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
                     <span className="text-[#3d4a42]">Leaf coverage of photo:</span>
                     <span className="font-bold text-[#131b2e]">{fmtPct(details?.leaf_area_pct_of_image)}</span>
                   </div>
-                  <div className="flex justify-between py-1 border-b border-[#dae2fd]">
-                    <span className="text-[#3d4a42]">Lesion count:</span>
-                    <span className="font-bold text-[#131b2e]">{details?.lesion_count ?? '—'}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-[#dae2fd]">
-                    <span className="text-[#3d4a42]">Largest lesion (% of leaf):</span>
-                    <span className="font-bold text-[#131b2e]">
-                      {fmtPct(details?.largest_lesion_pct_of_leaf)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-[#dae2fd]">
+                  <div className="flex justify-between py-1">
                     <span className="text-[#3d4a42]">Mean leaf probability:</span>
                     <span className="font-bold text-[#131b2e]">
                       {fmtProbability(details?.mean_leaf_probability)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-[#3d4a42]">Mean affected probability:</span>
-                    <span className="font-bold text-[#131b2e]">
-                      {fmtProbability(details?.mean_affected_probability)}
                     </span>
                   </div>
                 </div>
@@ -849,17 +830,21 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
                       <span className="text-right font-bold text-[#131b2e]">
                         {fmtProbability(details.thresholds.leaf)}
                       </span>
-                      <span>Affected pixel threshold:</span>
+                      <span>Black Sigatoka threshold:</span>
                       <span className="text-right font-bold text-[#131b2e]">
-                        {fmtProbability(details.thresholds.affected)}
+                        {fmtProbability(details.thresholds.black_sigatoka)}
+                      </span>
+                      <span>Yellow Sigatoka threshold:</span>
+                      <span className="text-right font-bold text-[#131b2e]">
+                        {fmtProbability(details.thresholds.yellow_sigatoka)}
                       </span>
                       <span>Min. leaf % (else no_leaf):</span>
                       <span className="text-right font-bold text-[#131b2e]">
                         {fmtPct(details.thresholds.min_leaf_pct)}
                       </span>
-                      <span>Min. affected % (else healthy):</span>
+                      <span>Min. disease % (else healthy):</span>
                       <span className="text-right font-bold text-[#131b2e]">
-                        {fmtPct(details.thresholds.min_affected_pct)}
+                        {fmtPct(details.thresholds.min_disease_pct)}
                       </span>
                       <span>Min. lesion size %:</span>
                       <span className="text-right font-bold text-[#131b2e]">
@@ -880,34 +865,16 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
                   </span>
                   <div className="flex justify-between py-1 border-b border-[#dae2fd]">
                     <span className="text-[#3d4a42]">Model version:</span>
-                    <span className="font-bold text-[#131b2e]">{leaf.model_version}</span>
+                    <span className="font-bold text-[#131b2e]">{disease.model_version}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-[#dae2fd]">
                     <span className="text-[#3d4a42]">Analyzed:</span>
-                    <span className="font-bold text-[#131b2e]">{new Date(leaf.created_at).toLocaleString()}</span>
+                    <span className="font-bold text-[#131b2e]">{new Date(disease.created_at).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between py-1">
                     <span className="text-[#3d4a42]">Total time:</span>
-                    <span className="font-bold text-[#006948]">{fmtMs(leaf.timings_ms.total)}</span>
+                    <span className="font-bold text-[#006948]">{fmtMs(disease.timings_ms.total)}</span>
                   </div>
-                </div>
-
-                {/* Cross-model reference */}
-                <div className="p-4 rounded-xl bg-[#fff7ed] border border-[#fed7aa] flex flex-col gap-2">
-                  <span className="font-mono text-[11px] font-bold text-[#ea580c] uppercase tracking-wider">
-                    Next: Identify the Disease
-                  </span>
-                  <p className="text-xs text-[#131b2e] leading-tight">
-                    Model 3 can tell you which disease is affecting this leaf.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('detect-disease')}
-                    className="w-full py-2.5 px-4 rounded-xl bg-[#ea580c] hover:bg-[#c2410c] text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-sm"
-                  >
-                    <span>Go to Detect Disease (Model 3)</span>
-                    <span className="material-symbols-outlined text-[16px] font-bold">arrow_forward</span>
-                  </button>
                 </div>
 
                 <button
@@ -926,26 +893,26 @@ export const LeafAnalysisView: React.FC<LeafAnalysisViewProps> = ({ onNavigate }
 
       {/* No result yet: either a hand-off is about to run (the ProcessingModal covers it), or
           there is genuinely nothing to show. */}
-      {!leaf && hasPendingHandoff && (
+      {!disease && hasPendingHandoff && (
         <div className="bg-white p-8 rounded-2xl border border-[#dae2fd] text-center text-sm text-[#3d4a42]">
-          Preparing your leaf analysis from the Plant Detection photo…
+          Preparing your disease check from the earlier photo…
         </div>
       )}
 
-      {!leaf && !hasPendingHandoff && (
+      {!disease && !hasPendingHandoff && (
         <div className="w-full max-w-3xl mx-auto px-6 py-12 flex flex-col items-center gap-4 text-center">
-          <span className="material-symbols-outlined text-[40px] text-[#3d4a42]">eco</span>
-          <h2 className="text-2xl font-extrabold text-[#131b2e]">No leaf analysis yet</h2>
+          <span className="material-symbols-outlined text-[40px] text-[#3d4a42]">coronavirus</span>
+          <h2 className="text-2xl font-extrabold text-[#131b2e]">No disease check yet</h2>
           <p className="text-sm text-[#3d4a42]">
-            Use the camera or upload above, try a sample, or analyse a banana plant photo first and
-            continue here with "Analyse the Leaf".
+            Use the camera or upload above, try a sample, or analyse a leaf first and continue here
+            with "Identify the Disease".
           </p>
           <button
             type="button"
-            onClick={() => onNavigate('detect')}
+            onClick={() => onNavigate('leaf-analysis')}
             className="mt-1 px-6 py-3 rounded-xl bg-[#006948] text-white hover:bg-[#00855d] font-semibold text-sm transition-all cursor-pointer"
           >
-            Go to Plant Detection
+            Go to Leaf Analysis
           </button>
         </div>
       )}

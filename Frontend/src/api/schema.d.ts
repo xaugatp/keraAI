@@ -63,6 +63,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/leaf-disease/predict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Identify healthy vs. diseased leaf tissue, and the disease type */
+        post: operations["predict_leaf_disease_api_v1_leaf_disease_predict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/leaf-segmentation/predict": {
         parameters: {
             query?: never;
@@ -89,7 +106,8 @@ export interface paths {
         };
         /**
          * List models and their status
-         * @description Includes planned models (status `unavailable`) so the UI can show "coming soon".
+         * @description All three models are built; `status: unavailable` means one failed to load at startup
+         *     (missing weights, bad checkpoint), not a future model.
          *
          *     A pure in-memory read, so it runs on the event loop without a threadpool hop.
          */
@@ -170,7 +188,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Details */
-            details: (components["schemas"]["TreeDetails"] | components["schemas"]["LeafSegDetails"]) | null;
+            details: (components["schemas"]["TreeDetails"] | components["schemas"]["LeafSegDetails"] | components["schemas"]["LeafDiseaseDetails"]) | null;
             /**
              * Id
              * Format: uuid
@@ -241,6 +259,41 @@ export interface components {
             thumbnail_url: string;
             /** Title */
             title?: string | null;
+        };
+        /** Body_predict_leaf_disease_api_v1_leaf_disease_predict_post */
+        Body_predict_leaf_disease_api_v1_leaf_disease_predict_post: {
+            /**
+             * Captured At
+             * @description ISO-8601 capture time; a time without an offset is read as UTC
+             */
+            captured_at?: string | null;
+            /**
+             * Gps Accuracy M
+             * @description GPS accuracy in metres
+             */
+            gps_accuracy_m?: number | null;
+            /**
+             * Image
+             * @description Photo to analyse (JPEG, PNG or WEBP)
+             */
+            image: string;
+            /**
+             * Latitude
+             * @description Degrees, -90..90
+             */
+            latitude?: number | null;
+            /**
+             * Longitude
+             * @description Degrees, -180..180
+             */
+            longitude?: number | null;
+            /**
+             * Source
+             * @description Where the photo came from
+             * @default upload
+             * @enum {string}
+             */
+            source: "upload" | "camera";
         };
         /** Body_predict_leaf_segmentation_api_v1_leaf_segmentation_predict_post */
         Body_predict_leaf_segmentation_api_v1_leaf_segmentation_predict_post: {
@@ -313,6 +366,25 @@ export interface components {
             source: "upload" | "camera";
         };
         /**
+         * DiseaseChannelMetrics
+         * @description Per-disease-channel measurements, one of these per entry in `LeafDiseaseDetails.diseases`.
+         */
+        DiseaseChannelMetrics: {
+            /** Area Pct Of Leaf */
+            area_pct_of_leaf: number;
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "black_sigatoka" | "yellow_sigatoka";
+            /** Largest Lesion Pct Of Leaf */
+            largest_lesion_pct_of_leaf: number;
+            /** Lesion Count */
+            lesion_count: number;
+            /** Mean Probability */
+            mean_probability?: number | null;
+        };
+        /**
          * GeoLocation
          * @description Where and when the photo was taken, as reported by the client's device.
          *
@@ -354,6 +426,67 @@ export interface components {
             thumbnail_url: string;
             /** Width */
             width?: number | null;
+        };
+        /** LeafDiseaseDetails */
+        LeafDiseaseDetails: {
+            /**
+             * Diagnosis
+             * @enum {string}
+             */
+            diagnosis: "healthy" | "black_sigatoka" | "yellow_sigatoka" | "no_leaf";
+            /** Diseases */
+            diseases: components["schemas"]["DiseaseChannelMetrics"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "leaf_disease";
+            /** Leaf Area Pct Of Image */
+            leaf_area_pct_of_image: number;
+            /** Mean Leaf Probability */
+            mean_leaf_probability?: number | null;
+            thresholds: components["schemas"]["LeafDiseaseThresholds"];
+        };
+        /**
+         * LeafDiseaseThresholds
+         * @description The exact policy that produced a result, echoed so a stored row is reproducible.
+         */
+        LeafDiseaseThresholds: {
+            /**
+             * Black Sigatoka
+             * @description p(black_sigatoka) >= this -> affected pixel
+             */
+            black_sigatoka: number;
+            /**
+             * Leaf
+             * @description p(leaf) >= this -> leaf pixel
+             */
+            leaf: number;
+            /**
+             * Min Disease Pct
+             * @description a disease's share of the leaf (%) below which it is ignored
+             */
+            min_disease_pct: number;
+            /**
+             * Min Leaf Pct
+             * @description leaf share of the image (%) below which the result is 'no_leaf'
+             */
+            min_leaf_pct: number;
+            /**
+             * Min Lesion Pct
+             * @description lesion blobs smaller than this % of the leaf area are dropped
+             */
+            min_lesion_pct: number;
+            /**
+             * Tta Hflip
+             * @description probabilities averaged with the horizontally flipped pass
+             */
+            tta_hflip: boolean;
+            /**
+             * Yellow Sigatoka
+             * @description p(yellow_sigatoka) >= this -> affected pixel
+             */
+            yellow_sigatoka: number;
         };
         /** LeafSegDetails */
         LeafSegDetails: {
@@ -824,6 +957,98 @@ export interface operations {
             };
             /** @description Validation error */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Unexpected server error or the model failed during inference. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The model or the database is currently unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    predict_leaf_disease_api_v1_leaf_disease_predict_post: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Anonymous per-device UUID v4 generated by the frontend (D-04). */
+                "X-Client-Id": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_predict_leaf_disease_api_v1_leaf_disease_predict_post"];
+            };
+        };
+        responses: {
+            /** @description Analysis created and stored. */
+            201: {
+                headers: {
+                    /** @description Relative URL of the new analysis (GET it for later). */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisDetail"];
+                };
+            };
+            /** @description Bad request: missing/invalid X-Client-Id, or the image is invalid or too small. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The upload exceeds the size limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description The image format is not supported. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Rate limit exceeded; see the Retry-After header. */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

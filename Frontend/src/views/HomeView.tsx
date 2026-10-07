@@ -25,10 +25,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
               <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-[#e2e7ff] shadow-sm border border-[#dae2fd]">
                 <span className="w-2 h-2 rounded-full bg-[#006948] animate-pulse" />
                 <span className="font-mono text-[11px] text-[#131b2e] uppercase tracking-wider font-semibold">
-                  Dual-Engine Vision Pipeline
+                  Three-Model Vision Pipeline
                 </span>
                 <span className="text-[#bccac0] font-mono text-[11px]">/</span>
-                <span className="font-mono text-[11px] text-[#3d4a42]">ResNet-50 + U-Net</span>
+                <span className="font-mono text-[11px] text-[#3d4a42]">YOLOv8-cls + U-Net x2</span>
               </div>
 
               {/* High-Impact Title */}
@@ -39,8 +39,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
 
               {/* Analytical Subtitle */}
               <p className="text-base text-[#3d4a42] max-w-xl leading-relaxed">
-                Detect banana plants, analyze leaf health, and identify disease-affected areas using
-                two-stage computer vision models with real-time semantic segmentation.
+                Identify a banana tree, measure leaf damage, and spot early signs of disease &mdash;
+                all from a single photo, using three trained computer vision models.
               </p>
 
               {/* Tech Architecture Chips */}
@@ -51,11 +51,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                 </span>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#eaedff] font-mono text-xs text-[#3d4a42] font-medium shadow-sm">
                   <span className="material-symbols-outlined text-[15px] text-[#006a61]">memory</span>
-                  ResNet Banana Classifier
+                  YOLOv8-cls Tree Classifier
                 </span>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#eaedff] font-mono text-xs text-[#3d4a42] font-medium shadow-sm">
                   <span className="material-symbols-outlined text-[15px] text-[#825100]">polyline</span>
-                  U-Net Semantic Segmentation
+                  U-Net Leaf Segmentation
                 </span>
               </div>
 
@@ -82,11 +82,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
               <div className="flex items-center gap-6 pt-2">
                 <div className="flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-[18px] text-[#006948]">check_circle</span>
-                  <span className="font-mono text-xs text-[#3d4a42]">PyTorch TensorRT Core</span>
+                  <span className="font-mono text-xs text-[#3d4a42]">Runs on CPU, no GPU needed</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-[18px] text-[#006948]">verified</span>
-                  <span className="font-mono text-xs text-[#3d4a42]">Validated on Musa Acuminata</span>
+                  <span className="font-mono text-xs text-[#3d4a42]">Trained on real banana farm photos</span>
                 </div>
               </div>
             </div>
@@ -103,15 +103,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                     <span className="w-3 h-3 rounded-full bg-[#a36700]/70" />
                     <span className="w-3 h-3 rounded-full bg-[#006948]/70" />
                     <span className="ml-2 font-mono text-xs text-[#3d4a42]">
-                      stage2_inference_stream_sigatoka_09.png
+                      sample_leaf_sigatoka.jpg
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded-full bg-[#dae2fd] text-[#3d4a42] font-mono text-[11px]">
-                      Batch: 01
-                    </span>
                     <span className="px-2 py-0.5 rounded-full bg-[#006948]/10 text-[#006948] font-mono text-[11px] font-semibold">
-                      Live Vision HUD
+                      Example output
                     </span>
                   </div>
                 </div>
@@ -174,45 +171,15 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                         style={{ animationDuration: '3.5s' }}
                       />
 
-                      {/* AI Precision Bounding Box around Primary Necrosis Center */}
-                      <g className="transition-transform duration-700">
-                        {/* Outer Focus Frame */}
-                        <rect
-                          x="150"
-                          y="100"
-                          width="540"
-                          height="360"
-                          rx="12"
-                          fill="none"
-                          stroke="#ffb95f"
-                          strokeWidth="2"
-                          strokeDasharray="8 6"
-                          opacity="0.9"
-                        />
-                        {/* Target Corners */}
-                        <path d="M 150 130 L 150 100 L 180 100" fill="none" stroke="#85f8c4" strokeWidth="4" strokeLinecap="round" />
-                        <path d="M 660 100 L 690 100 L 690 130" fill="none" stroke="#85f8c4" strokeWidth="4" strokeLinecap="round" />
-                        <path d="M 150 430 L 150 460 L 180 460" fill="none" stroke="#85f8c4" strokeWidth="4" strokeLinecap="round" />
-                        <path d="M 660 460 L 690 460 L 690 430" fill="none" stroke="#85f8c4" strokeWidth="4" strokeLinecap="round" />
-                        {/* Scanner Crosshairs */}
-                        <line x1="420" y1="90" x2="420" y2="470" stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" strokeWidth="1" />
-                        <line x1="140" y1="280" x2="700" y2="280" stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" strokeWidth="1" />
-                      </g>
                     </svg>
                   )}
 
-                  {/* Floating Precision Diagnostic Tag Top-Left */}
+                  {/* Floating Diagnostic Tag Top-Left — illustrative, not a live reading */}
                   <div className="absolute top-4 left-4 flex flex-col gap-1.5 z-20">
                     <div className="backdrop-blur-md bg-white/90 px-3 py-1.5 rounded-lg shadow-md flex items-center gap-2 border border-white/60">
                       <span className="w-2.5 h-2.5 rounded-full bg-[#ba1a1a]" />
                       <span className="text-xs text-[#131b2e] font-semibold tracking-tight">
-                        Black Sigatoka Detected (93.8%)
-                      </span>
-                    </div>
-                    <div className="backdrop-blur-md bg-white/90 px-3 py-1 rounded-lg shadow-sm flex items-center gap-2 border border-white/60">
-                      <span className="material-symbols-outlined text-[14px] text-[#825100]">pie_chart</span>
-                      <span className="font-mono text-[11px] text-[#3d4a42] font-medium">
-                        Infected Area: <strong className="text-[#131b2e]">27.4%</strong>
+                        Black Sigatoka &mdash; shaded overlay
                       </span>
                     </div>
                   </div>
@@ -223,32 +190,27 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                       onClick={() => setActiveMask(!activeMask)}
                       className="font-mono text-[11px] text-[#006948] font-bold hover:underline cursor-pointer"
                     >
-                      {activeMask ? 'U-NET MASK: ACTIVE' : 'U-NET MASK: HIDDEN'}
+                      {activeMask ? 'OVERLAY: ON' : 'OVERLAY: OFF'}
                     </button>
-                    <span className="w-1 h-3 bg-[#bccac0]/40 rounded-full" />
-                    <div className="flex items-center gap-1">
-                      <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#ffdad6]" />
-                      <span className="font-mono text-[11px] text-[#3d4a42]">Lesions (5)</span>
-                    </div>
                   </div>
 
                   {/* Scanline Sweep Animation Effect */}
                   <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-transparent via-[#006948] to-transparent opacity-80 animate-[bounce_4s_infinite]" />
                 </div>
 
-                {/* Card Bottom Telemetry Panel */}
+                {/* Card Bottom Panel — real, verified test-set metrics (see About page for the full breakdown) */}
                 <div className="p-5 bg-white grid grid-cols-1 sm:grid-cols-3 gap-2 border-t border-[#eaedff]">
                   <div className="flex flex-col">
-                    <span className="text-[11px] text-[#3d4a42]">Class Confirmation</span>
-                    <span className="font-mono text-sm text-[#006948] font-bold">Musa Leaf (99.8%)</span>
+                    <span className="text-[11px] text-[#3d4a42]">Leaf Segmentation</span>
+                    <span className="font-mono text-sm text-[#006948] font-bold">0.986 Dice</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[11px] text-[#3d4a42]">Pathogen Taxonomy</span>
-                    <span className="font-mono text-sm text-[#ba1a1a] font-bold">Pseudocercospora</span>
+                    <span className="text-[11px] text-[#3d4a42]">Disease Diagnosis</span>
+                    <span className="font-mono text-sm text-[#ba1a1a] font-bold">96% accuracy</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[11px] text-[#3d4a42]">Segmentation Loss</span>
-                    <span className="font-mono text-sm text-[#131b2e] font-bold">0.031 Dice</span>
+                    <span className="text-[11px] text-[#3d4a42]">Inference</span>
+                    <span className="font-mono text-sm text-[#131b2e] font-bold">CPU only</span>
                   </div>
                 </div>
               </div>
@@ -263,14 +225,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
           {/* Section Header */}
           <div className="flex flex-col items-center text-center max-w-2xl mx-auto gap-2">
             <span className="font-mono text-xs uppercase tracking-wider text-[#006948] font-bold">
-              Modular Computer Vision Pipeline
+              Three Models, One Pipeline
             </span>
             <h2 className="text-2xl lg:text-3xl font-extrabold text-[#131b2e] tracking-tight">
-              End-to-End Plant Pathology Architecture
+              Three Models Working Together
             </h2>
             <p className="text-sm text-[#3d4a42] leading-relaxed">
-              Engineered to isolate background agricultural clutter, validate biological
-              authenticity, and quantify leaf tissue decay with surgical granularity.
+              Each model does one job well: confirm it's a banana tree, measure leaf damage, and
+              identify disease &mdash; each one usable on its own or chained together.
             </p>
           </div>
 
@@ -297,14 +259,15 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                   </h3>
                 </div>
                 <p className="text-sm text-[#3d4a42] leading-relaxed">
-                  Confirms Musa genus biological presence and automatically tags precise field geo-coordinates (Latitude &amp; Longitude) of the plant.
+                  Tells a banana tree apart from other plants, and tags the photo with the device's GPS
+                  location so a farm can be mapped tree by tree.
                 </p>
               </div>
 
               <div className="flex flex-col gap-3">
                 <div className="p-3 rounded-xl bg-[#eaedff] flex items-center justify-between font-mono text-xs">
-                  <span className="text-[#3d4a42]">Geo-Coordinates:</span>
-                  <span className="text-[#006948] font-bold">27.7172°, 85.3240°</span>
+                  <span className="text-[#3d4a42]">Location:</span>
+                  <span className="text-[#006948] font-bold">From device GPS</span>
                 </div>
                 <div className="w-full py-2.5 px-4 rounded-xl bg-[#eaedff] group-hover:bg-[#006948] text-[#131b2e] group-hover:text-white font-bold text-xs transition-colors flex items-center justify-center gap-2">
                   <span>Start Plant Detection</span>
@@ -334,7 +297,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                   </h3>
                 </div>
                 <p className="text-sm text-[#3d4a42] leading-relaxed">
-                  Deep multi-class CNN (Model 3) identifies Black Sigatoka, Yellow Sigatoka, or Cordana Spot, and pinpoints infected foliar necrotic areas.
+                  Model 3 tells a healthy leaf from one with Black Sigatoka or Yellow Sigatoka, and marks where the disease sits on the leaf.
                 </p>
               </div>
 
@@ -371,7 +334,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                   </h3>
                 </div>
                 <p className="text-sm text-[#3d4a42] leading-relaxed">
-                  Model 4 U-Net segmentation strictly isolates affected unhealthy areas from healthy foliar tissue, with interactive split-screen slider comparisons.
+                  Model 2 measures how much of a leaf is healthy versus damaged, with an interactive split-screen comparison.
                 </p>
               </div>
 
@@ -400,12 +363,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                 Execution Workflow
               </span>
               <h2 className="text-2xl lg:text-3xl font-extrabold text-[#131b2e]">
-                From Raw Field Capture to Actionable Agronomic Data
+                From a Photo to a Result
               </h2>
             </div>
             <div className="text-sm text-[#3d4a42] max-w-sm">
-              A sequential cascading pipeline that prevents hallucinated classifications on
-              non-target vegetation.
+              Each step only runs once the one before it confirms there's a banana tree or leaf in
+              the photo.
             </div>
           </div>
 
@@ -430,7 +393,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                   <span className="text-xs text-[#006948] font-semibold">Input Pre-processing</span>
                 </div>
                 <p className="text-xs text-[#3d4a42] leading-relaxed">
-                  Acquire field photos via live camera or image upload. Automatic orientation normalization and RGB calibration applied.
+                  Take a photo or upload one. EXIF orientation is corrected automatically so the image is always right-side up.
                 </p>
 
                 <div className="mt-auto pt-2 flex items-center gap-1.5 text-xs font-bold text-[#006948] group-hover:translate-x-1 transition-transform">
@@ -471,7 +434,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                   <span className="text-xs text-[#006a61] font-semibold">Species &amp; Geo-Coordinates</span>
                 </div>
                 <p className="text-xs text-[#3d4a42] leading-relaxed">
-                  Model 1 verifies Musa genus integrity and acquires field GPS latitude and longitude coordinates for plant mapping.
+                  Model 1 checks whether the photo shows a banana tree, and records the GPS location it was taken at.
                 </p>
 
                 <div className="mt-auto pt-2 flex items-center gap-1.5 text-xs font-bold text-[#006a61] group-hover:translate-x-1 transition-transform">
@@ -512,7 +475,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                   <span className="text-xs text-[#825100] font-semibold">Pathogen Classification</span>
                 </div>
                 <p className="text-xs text-[#3d4a42] leading-relaxed">
-                  Model 3 multi-class deep CNN diagnoses foliar pathogens (Sigatoka, Cordana) and generates treatment recommendations.
+                  Model 3 tells a healthy leaf from one with Black Sigatoka or Yellow Sigatoka, and shows where the disease is on the leaf.
                 </p>
 
                 <div className="mt-auto pt-2 flex items-center gap-1.5 text-xs font-bold text-[#825100] group-hover:translate-x-1 transition-transform">
@@ -553,7 +516,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                   <span className="text-xs text-[#ba1a1a] font-semibold">Healthy vs. Unhealthy Ratio</span>
                 </div>
                 <p className="text-xs text-[#3d4a42] leading-relaxed">
-                  Model 4 U-Net generates pixel segmentation masks isolating affected necrotic regions from healthy tissue with split slider analysis.
+                  Model 2 generates a pixel mask separating damaged leaf tissue from healthy tissue, viewable with a split-slider comparison.
                 </p>
 
                 <div className="mt-auto pt-2 flex items-center gap-1.5 text-xs font-bold text-[#ba1a1a] group-hover:translate-x-1 transition-transform">
@@ -577,23 +540,23 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
             <div className="lg:col-span-5 flex flex-col gap-4">
               <div className="flex items-center gap-2">
                 <span className="px-3 py-1 rounded-full bg-white text-[#131b2e] font-mono text-xs font-semibold shadow-sm">
-                  Agro-CV Benchmarks v2.4
+                  Real Training Results
                 </span>
                 <span className="w-2 h-2 rounded-full bg-[#006948]" />
               </div>
               <h3 className="text-xl font-bold text-[#131b2e]">
-                Validated Machine Learning for Tropical Foliar Pathology
+                Trained and Tested on Real Banana Farm Photos
               </h3>
               <p className="text-sm text-[#3d4a42] leading-relaxed">
-                Engineered specifically to solve real-world plantation diagnostics under varying
-                illumination, moisture glares, and lens distortions.
+                Every number below comes from a held-out test set the models never saw during
+                training. The full breakdown, including the harder cases, is on the About page.
               </p>
               <div className="pt-2">
                 <button
                   onClick={() => onNavigate('about-models')}
                   className="inline-flex items-center gap-1.5 text-[#006948] font-bold text-sm hover:underline cursor-pointer"
                 >
-                  <span>Inspect Full Validation Loss Curves</span>
+                  <span>See the full training results</span>
                   <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
                 </button>
               </div>
@@ -608,10 +571,10 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                   <span className="material-symbols-outlined text-[20px] text-[#006948]">verified</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-3xl font-extrabold text-[#131b2e] tracking-tight">97.4%</span>
-                  <span className="font-mono text-xs text-[#006948] font-semibold">Cross-Validation Score</span>
+                  <span className="text-3xl font-extrabold text-[#131b2e] tracking-tight">94.3%</span>
+                  <span className="font-mono text-xs text-[#006948] font-semibold">Tree Classification</span>
                 </div>
-                <span className="text-xs text-[#3d4a42]">Across Sigatoka, Cordana, and Healthy test splits</span>
+                <span className="text-xs text-[#3d4a42]">Held-out test accuracy, Model 1</span>
               </div>
 
               {/* Metric 2 */}
@@ -621,23 +584,23 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate }) => {
                   <span className="material-symbols-outlined text-[20px] text-[#006a61]">speed</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-3xl font-extrabold text-[#131b2e] tracking-tight">&lt;0.6s</span>
-                  <span className="font-mono text-xs text-[#006a61] font-semibold">Inference Latency</span>
+                  <span className="text-3xl font-extrabold text-[#131b2e] tracking-tight">~200ms</span>
+                  <span className="font-mono text-xs text-[#006a61] font-semibold">Typical Inference</span>
                 </div>
-                <span className="text-xs text-[#3d4a42]">End-to-end FastAPI endpoint response time</span>
+                <span className="text-xs text-[#3d4a42]">Per model, running on CPU &mdash; no GPU</span>
               </div>
 
               {/* Metric 3 */}
               <div className="bg-white rounded-2xl p-6 shadow-sm flex flex-col justify-between gap-3 border border-[#dae2fd]">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-[#3d4a42] uppercase font-semibold">Corpus</span>
+                  <span className="text-xs text-[#3d4a42] uppercase font-semibold">Training Data</span>
                   <span className="material-symbols-outlined text-[20px] text-[#825100]">collections_bookmark</span>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-3xl font-extrabold text-[#131b2e] tracking-tight">12,000+</span>
-                  <span className="font-mono text-xs text-[#825100] font-semibold">Annotated Musa Leaves</span>
+                  <span className="text-3xl font-extrabold text-[#131b2e] tracking-tight">1,028</span>
+                  <span className="font-mono text-xs text-[#825100] font-semibold">Real Photos</span>
                 </div>
-                <span className="text-xs text-[#3d4a42]">Segmented bounding coordinates &amp; masks</span>
+                <span className="text-xs text-[#3d4a42]">Across all three models' training sets</span>
               </div>
             </div>
           </div>
