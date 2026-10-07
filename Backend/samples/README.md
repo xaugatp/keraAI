@@ -8,23 +8,36 @@ real pipeline, so the stored result is exactly what the model said at seeding ti
 samples/
   tree_classification/      <- one folder per model key
     manifest.json
+    banana_tree_01.jpg
+    banana_tree_02.jpg
+    non_banana_tree_01.jpg
+    non_banana_tree_02.jpg
+  leaf_segmentation/
+    manifest.json
     banana_leaf_closeup.jpg
     banana_leaf_crop_upper.jpg
     banana_leaf_crop_midrib.jpg
     banana_leaf_crop_lower.jpg
-  leaf_segmentation/
+  leaf_disease/
     manifest.json
-    (same four files)
+    (same four files as leaf_segmentation, reused as development placeholders)
 ```
 
-## The images that are here are DEVELOPMENT PLACEHOLDERS
+## Status per model
 
-All four files come from the project's own single leaf photo — `banana_leaf_closeup.jpg` is the full photo (shrunk to
-1024 px, metadata removed); the other three are real crops of different regions of that same photo, so the sample picker
-has some visual variety instead of one button. They are used for both models only so the app has something to show, and
-they are a weak fit for the tree model in particular (a leaf close-up, not a whole tree). Replace them with your real
-sample photos — ideally whole-tree shots for `tree_classification` — and while the dummy weights are installed the
-results shown for any sample are random numbers, not predictions.
+`tree_classification` uses real whole-tree photos (from the Roboflow banana-tree-detection
+test split, via `experiment/01_tree_classification.ipynb`) analysed by the real trained
+checkpoint (`tree_cls_real_v1`) — see each entry's `description` for its real confidence score.
+
+`leaf_segmentation` is also promoted to its real trained checkpoint (`leaf_seg_real_v1`, via
+`experiment/02_leaf_segmentation.ipynb`). Its four images are still the project's own single leaf
+photo and three crops of it (not a curated farm sample set) — replace them with real field photos
+when available — but the measurements shown are genuine model output, not placeholder numbers.
+
+`leaf_disease` is now also promoted to its real trained checkpoint (`leaf_disease_real_v1`, via
+`experiment/03_leaf_disease_segmentation.ipynb`). It reuses the same leaf photo/crops as
+`leaf_segmentation` (not a curated farm sample set) — replace them with real field photos when
+available — but the diagnoses shown are genuine model output, not random dummy-weight numbers.
 
 ## manifest.json
 

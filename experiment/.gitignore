@@ -1,0 +1,20 @@
+# Virtual environment
+.venv/
+
+# Extracted / cached datasets (reproducible from ../Data/*.zip — do not commit raw images)
+data_cache/
+
+# Training artifacts
+runs/
+checkpoints/
+outputs/
+*.pt
+*.pth
+*.onnx
+
+# Notebook execution noise
+.ipynb_checkpoints/
+__pycache__/
+
+# Reference repo clone (pulled fresh from GitHub, not ours to version here)
+_ref_repo/

@@ -11,9 +11,10 @@ from PIL import Image
 
 import app.ml.registry as registry_module
 from app.core.errors import InferenceError, ModelUnavailableError
-from app.ml.base import ModelInfo, ModelLoadError, Predictor
+from app.ml.base import ModelLoadError, Predictor
 from app.ml.registry import (
     MODEL_SPECS,
+    PLANNED_MODEL_INFOS,
     ModelRegistry,
     build_registry,
     import_factory,
@@ -24,6 +25,7 @@ from tests.fixtures.settings import make_settings
 
 TREE = "tree_classification"
 LEAF = "leaf_segmentation"
+LEAF_DISEASE = "leaf_disease"
 WINDOWS_PATH = r"C:\Users\someone\KeraAI\Backend\weights\tree_cls_v1.pt"
 
 
@@ -76,18 +78,21 @@ class TestBuildRegistry:
     def test_ready_models_are_served(self, factories):
         factories[TREE] = good(TREE)
         factories[LEAF] = good(LEAF, task="segment")
+        factories[LEAF_DISEASE] = good(LEAF_DISEASE, task="segment")
         registry = build_registry(make_settings())
 
         assert registry.get(TREE).is_ready
         assert registry.get(LEAF).is_ready
+        assert registry.get(LEAF_DISEASE).is_ready
         assert registry.readiness() == (True, None)
         statuses = {info.key: info.status for info in registry.all_info()}
-        assert statuses == {TREE: "ready", LEAF: "ready", "leaf_disease": "unavailable"}
+        assert statuses == {TREE: "ready", LEAF: "ready", LEAF_DISEASE: "ready"}
 
     def test_each_predictor_is_loaded_then_warmed_up(self, factories):
         tree = FakePredictor(TREE, ready=False)
         factories[TREE] = tree
         factories[LEAF] = good(LEAF)
+        factories[LEAF_DISEASE] = good(LEAF_DISEASE)
         build_registry(make_settings())
         assert tree.load_calls == 1
         assert tree.warmup_calls == 1
@@ -96,9 +101,10 @@ class TestBuildRegistry:
     def test_disabled_model_is_not_constructed_or_loaded(self, factories):
         factories[TREE] = good(TREE)
         factories[LEAF] = good(LEAF)
+        factories[LEAF_DISEASE] = good(LEAF_DISEASE)
         registry = build_registry(make_settings(tree_enabled=False))
 
-        assert factories.built == [LEAF]
+        assert factories.built == [LEAF, LEAF_DISEASE]
         with pytest.raises(ModelUnavailableError):
             registry.get(TREE)
         info = next(i for i in registry.all_info() if i.key == TREE)
@@ -112,6 +118,7 @@ class TestBuildRegistry:
             make_settings(
                 tree_enabled=False,
                 leaf_seg_enabled=False,
+                leaf_disease_enabled=False,
                 tree_model_version="tree_cls_dummy_v0",
                 tree_is_placeholder=True,
             )
@@ -122,7 +129,9 @@ class TestBuildRegistry:
         assert info.task == "classify"
 
     def test_everything_disabled_still_builds_and_is_ready(self, factories):
-        registry = build_registry(make_settings(tree_enabled=False, leaf_seg_enabled=False))
+        registry = build_registry(
+            make_settings(tree_enabled=False, leaf_seg_enabled=False, leaf_disease_enabled=False)
+        )
         assert factories.built == []
         assert registry.readiness() == (True, None)
 
@@ -202,7 +211,7 @@ class TestBuildRegistry:
         ok, detail = registry.readiness()
         assert ok is False
         assert detail is not None and TREE in detail and LEAF in detail
-        for key in (TREE, LEAF):
+        for key in (TREE, LEAF, LEAF_DISEASE):
             with pytest.raises(ModelUnavailableError):
                 registry.get(key)
 
@@ -219,6 +228,7 @@ class TestBuildRegistry:
         assert {s.key: s.factory for s in MODEL_SPECS} == {
             TREE: "app.ml.tree_classifier:TreeClassifier",
             LEAF: "app.ml.leaf_segmenter:LeafSegmenter",
+            LEAF_DISEASE: "app.ml.leaf_disease_identifier:LeafDiseaseIdentifier",
         }
 
     def test_import_factory_resolves_module_class_strings(self):
@@ -278,31 +288,15 @@ class TestGet:
 
 
 class TestAllInfo:
-    def test_includes_the_planned_leaf_disease_entry(self):
-        registry = ModelRegistry.from_predictors([FakePredictor(TREE)])
-        planned = [info for info in registry.all_info() if info.key == "leaf_disease"]
-        assert planned == [
-            ModelInfo(
-                key="leaf_disease",
-                display_name="Leaf disease detection",
-                version="n/a",
-                task="n/a",
-                classes=[],
-                status="unavailable",
-                reason="Planned — not built yet",
-                is_placeholder=False,
-            )
-        ]
+    def test_planned_model_infos_is_empty_now_every_claude_md_model_is_built(self):
+        # All three CLAUDE.md models now have a predictor + settings (ADR 0019);
+        # this tuple stays as the place a genuinely new, unbuilt model would go.
+        assert PLANNED_MODEL_INFOS == ()
 
-    def test_planned_entry_is_last_and_does_not_affect_readiness(self):
+    def test_registry_order_matches_registration_order(self):
         registry = ModelRegistry.from_predictors([FakePredictor(TREE), FakePredictor(LEAF)])
-        assert [info.key for info in registry.all_info()] == [TREE, LEAF, "leaf_disease"]
+        assert [info.key for info in registry.all_info()] == [TREE, LEAF]
         assert registry.readiness() == (True, None)
-
-    def test_planned_entry_is_not_duplicated_if_a_real_predictor_takes_the_key(self):
-        registry = ModelRegistry.from_predictors([FakePredictor("leaf_disease")])
-        infos = [info for info in registry.all_info() if info.key == "leaf_disease"]
-        assert len(infos) == 1 and infos[0].status == "ready"
 
     def test_ready_info_exposes_classes_and_version(self):
         registry = ModelRegistry.from_predictors([FakePredictor(TREE, version="tree_cls_v1")])
@@ -313,8 +307,8 @@ class TestAllInfo:
             ["banana_tree", "non_banana"],
         )
 
-    def test_empty_registry_still_lists_the_planned_model(self):
-        assert [i.key for i in ModelRegistry.from_predictors([]).all_info()] == ["leaf_disease"]
+    def test_empty_registry_lists_nothing(self):
+        assert ModelRegistry.from_predictors([]).all_info() == []
         assert ModelRegistry.from_predictors([]).readiness() == (True, None)
 
     def test_registering_the_same_key_twice_replaces_the_predictor(self):

@@ -21,14 +21,16 @@ from app.schemas.common import (
     ModelKey,
     UtcDatetime,
 )
+from app.schemas.leaf_disease import LeafDiseaseDetails
 from app.schemas.leaf_seg import LeafSegDetails
 from app.schemas.tree import TreeDetails
 
-# A second model exists now, so `details` is a discriminated union on `kind`
-# (spec 10): the JSON stored in analyses.details is validated against exactly one
-# shape, and OpenAPI renders a `oneOf` with a discriminator so the frontend can
-# narrow the TypeScript type on `kind`. Adding Model 3 = add its details class here.
-AnalysisDetails = Annotated[TreeDetails | LeafSegDetails, Field(discriminator="kind")]
+# `details` is a discriminated union on `kind` (spec 10): the JSON stored in
+# analyses.details is validated against exactly one shape, and OpenAPI renders a
+# `oneOf` with a discriminator so the frontend can narrow the TypeScript type on `kind`.
+AnalysisDetails = Annotated[
+    TreeDetails | LeafSegDetails | LeafDiseaseDetails, Field(discriminator="kind")
+]
 
 
 @dataclass(frozen=True)

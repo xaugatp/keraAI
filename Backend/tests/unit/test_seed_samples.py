@@ -79,6 +79,11 @@ class TestValidManifest:
         )
         assert len(load_manifest(folder)) == 1
 
+    # Models still waiting on real weights keep the development-placeholder photos
+    # (and must say so in every sample's title); a model promoted to a real
+    # checkpoint (tree_classification, see ADR 0010) gets real sample photos instead.
+    _STILL_PLACEHOLDER: set[str] = set()
+
     def test_the_committed_manifests_are_valid(self) -> None:
         keys = sorted(p.name for p in seed_samples.SAMPLES_ROOT.iterdir() if p.is_dir())
         assert {"tree_classification", "leaf_segmentation"} <= set(keys)
@@ -86,7 +91,11 @@ class TestValidManifest:
             samples = load_manifest(seed_samples.SAMPLES_ROOT / key)
             assert samples, key
             for sample in samples:
-                assert "placeholder" in sample.entry.title.lower()
+                is_placeholder_title = "placeholder" in sample.entry.title.lower()
+                assert is_placeholder_title == (key in self._STILL_PLACEHOLDER), (
+                    key,
+                    sample.entry.title,
+                )
 
 
 class TestInvalidManifest:

@@ -35,6 +35,7 @@ def test_all_spec_endpoints_exist(schema: dict[str, Any]) -> None:
         ("GET", f"{PREFIX}/models"),
         ("POST", f"{PREFIX}/tree/predict"),
         ("POST", f"{PREFIX}/leaf-segmentation/predict"),
+        ("POST", f"{PREFIX}/leaf-disease/predict"),
         ("GET", f"{PREFIX}/analyses"),
         ("GET", f"{PREFIX}/analyses/{{analysis_id}}"),
         ("GET", f"{PREFIX}/analyses/{{analysis_id}}/image"),
@@ -51,11 +52,13 @@ def test_details_is_a_discriminated_union_on_kind(schema: dict[str, Any]) -> Non
     assert {option["$ref"] for option in union["oneOf"]} == {
         "#/components/schemas/TreeDetails",
         "#/components/schemas/LeafSegDetails",
+        "#/components/schemas/LeafDiseaseDetails",
     }
     assert union["discriminator"]["propertyName"] == "kind"
     assert union["discriminator"]["mapping"] == {
         "tree_classification": "#/components/schemas/TreeDetails",
         "leaf_segmentation": "#/components/schemas/LeafSegDetails",
+        "leaf_disease": "#/components/schemas/LeafDiseaseDetails",
     }
 
 
@@ -75,6 +78,7 @@ def test_every_operation_documents_problem_json_errors(schema: dict[str, Any]) -
     [
         ("POST", "/tree/predict", {"400", "413", "415", "422", "429", "500", "503"}),
         ("POST", "/leaf-segmentation/predict", {"400", "413", "415", "422", "429", "500", "503"}),
+        ("POST", "/leaf-disease/predict", {"400", "413", "415", "422", "429", "500", "503"}),
         ("GET", "/analyses", {"400", "422"}),
         ("GET", "/analyses/{analysis_id}", {"400", "404", "422"}),
         ("GET", "/analyses/{analysis_id}/image", {"403", "404", "422"}),
@@ -99,7 +103,7 @@ def test_problem_detail_component_matches_the_real_error_body(schema: dict[str, 
 
 
 def test_predict_documents_201_with_a_location_header(schema: dict[str, Any]) -> None:
-    for path in ("/tree/predict", "/leaf-segmentation/predict"):
+    for path in ("/tree/predict", "/leaf-segmentation/predict", "/leaf-disease/predict"):
         created = schema["paths"][f"{PREFIX}{path}"]["post"]["responses"]["201"]
         assert created["content"]["application/json"]["schema"] == {
             "$ref": "#/components/schemas/AnalysisDetail"
@@ -131,6 +135,7 @@ def test_client_id_header_is_documented_as_required_where_it_is_needed(
     needs_header = {
         ("POST", "/tree/predict"),
         ("POST", "/leaf-segmentation/predict"),
+        ("POST", "/leaf-disease/predict"),
         ("GET", "/analyses"),
         ("GET", "/analyses/{analysis_id}"),
         ("DELETE", "/analyses/{analysis_id}"),

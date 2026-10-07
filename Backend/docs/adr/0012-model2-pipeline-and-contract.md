@@ -32,3 +32,15 @@ loads unchanged.
 + Real, explainable numbers; real weights drop in with no conversion.
 − "Healthy" is not validated. Severity bands (low/moderate/severe) were deliberately **not** added: they need agronomic
   thresholds from the owner.
+
+## Update — real training run finished (2026-10-07)
+`experiment/02_leaf_segmentation.ipynb` retrained the model on 161 images (not the 50-image reference
+notebook above) and fixed the test-split-tuning flaw this ADR flagged: the affected threshold is now
+tuned on validation only (0.90, up from the reference notebook's optimistic 0.85) and touched against
+test exactly once, afterward. Test-set results: leaf IoU 0.972 / Dice 0.986; affected IoU 0.514 / Dice
+0.679 at threshold 0.90. Checkpoint promoted to `Backend/weights/leaf_seg_v1.pt`,
+`LEAF_SEG_MODEL_VERSION=leaf_seg_real_v1`, `LEAF_SEG_IS_PLACEHOLDER=false` (ADR 0010's promotion
+mechanism). The "unvalidated" caveat above no longer applies to the threshold itself, but the
+underlying caveat stands in spirit: 161 training images is still not a lot of data for the affected
+channel, and a "healthy" verdict still means "no damage above threshold found," not a clinical
+guarantee.

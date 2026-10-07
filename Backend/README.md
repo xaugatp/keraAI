@@ -8,7 +8,7 @@ serves the result plus a browsable history.
 |---|-----------------------|------------------------------------------------------|--------------|--------|
 | 1 | `tree_classification` | Banana tree vs not a banana tree                     | YOLOv8-cls   | built  |
 | 2 | `leaf_segmentation`   | Measures healthy leaf tissue vs damaged tissue       | U-Net        | built  |
-| 3 | `leaf_disease`        | Healthy vs diseased leaf (+ disease type)            | U-Net-type   | planned (listed as "coming soon" by `GET /models`) |
+| 3 | `leaf_disease`        | Healthy vs diseased leaf (+ disease type)            | U-Net-type   | built  |
 
 The authoritative design is `docs/BACKEND_SPEC.md`; decisions are recorded as ADRs in `docs/adr/`. The working agreement
 for contributors (and for Claude Code) is the repo-root `CLAUDE.md`.
@@ -163,6 +163,20 @@ at startup with a clear message. At minimum set `SIGNING_SECRET` (32+ random cha
 | `LEAF_SEG_MIN_LESION_PCT` | `0.05` | Lesion blobs smaller than this % of the leaf are dropped. |
 | `LEAF_SEG_MIN_AFFECTED_PCT` | `0.5` | Damage below this % of the leaf gives `healthy`. |
 | `LEAF_SEG_IS_PLACEHOLDER` | `false` | `true` while the weights are the dummy stand-in. |
+| **Model 3: leaf disease identification** | | |
+| `LEAF_DISEASE_ENABLED` | `true` | Load this model at startup. |
+| `LEAF_DISEASE_WEIGHTS_PATH` | `weights/leaf_disease_v1.pt` | Bare `state_dict` from the training notebook. |
+| `LEAF_DISEASE_MODEL_VERSION` | `leaf_disease_v1` | Use `leaf_disease_dummy_v0` with dummy weights. |
+| `LEAF_DISEASE_ENCODER` | `resnet34` | Must match the checkpoint. |
+| `LEAF_DISEASE_IMGSZ` | `512` | Network input side; must be a multiple of 32. |
+| `LEAF_DISEASE_LEAF_THRESHOLD` | `0.50` | Sigmoid threshold of the leaf channel. |
+| `LEAF_DISEASE_BLACK_SIGATOKA_THRESHOLD` | `0.85` | Sigmoid threshold of the black Sigatoka channel (validation-tuned). |
+| `LEAF_DISEASE_YELLOW_SIGATOKA_THRESHOLD` | `0.55` | Sigmoid threshold of the yellow Sigatoka channel (validation-tuned). |
+| `LEAF_DISEASE_TTA_HFLIP` | `true` | Average with a horizontally flipped pass (doubles latency). |
+| `LEAF_DISEASE_MIN_LEAF_PCT` | `3.0` | Leaf smaller than this % of the image gives `no_leaf`. |
+| `LEAF_DISEASE_MIN_LESION_PCT` | `0.05` | Lesion blobs smaller than this % of the leaf are dropped. |
+| `LEAF_DISEASE_MIN_DISEASE_PCT` | `0.5` | A disease below this % of the leaf is ignored. |
+| `LEAF_DISEASE_IS_PLACEHOLDER` | `false` | `true` while the weights are the dummy stand-in. |
 
 ### 4. SQL Server
 
@@ -202,20 +216,24 @@ TREE_MODEL_VERSION=tree_cls_dummy_v0
 TREE_IS_PLACEHOLDER=true
 LEAF_SEG_MODEL_VERSION=leaf_seg_dummy_v0
 LEAF_SEG_IS_PLACEHOLDER=true
+LEAF_DISEASE_MODEL_VERSION=leaf_disease_dummy_v0
+LEAF_DISEASE_IS_PLACEHOLDER=true
 ```
 
 **Switching to the real weights:**
 
 1. Copy the trained files over the dummies, by hand: `weights/tree_cls_v1.pt` (the original Ultralytics `.pt`, a zip; never
-   unzip it, and `Backend/yolov8n/` is the stock COCO detector, not your model) and `weights/leaf_seg_v1.pt` (the bare
-   `state_dict`).
+   unzip it, and `Backend/yolov8n/` is the stock COCO detector, not your model), `weights/leaf_seg_v1.pt` and
+   `weights/leaf_disease_v1.pt` (both bare `state_dict`s).
 2. In `.env`, EDIT the existing lines (do not add duplicates): `TREE_MODEL_VERSION=tree_cls_v1`, `TREE_IS_PLACEHOLDER=false`,
-   `LEAF_SEG_MODEL_VERSION=leaf_seg_v1`, `LEAF_SEG_IS_PLACEHOLDER=false`. Check that `TREE_POSITIVE_CLASS`,
-   `TREE_DISPLAY_NAMES` and `LEAF_SEG_ENCODER` match the checkpoints.
-3. `python -m scripts.check_env` must show both models loading with no placeholder warning, and
+   `LEAF_SEG_MODEL_VERSION=leaf_seg_v1`, `LEAF_SEG_IS_PLACEHOLDER=false`, `LEAF_DISEASE_MODEL_VERSION=leaf_disease_v1`,
+   `LEAF_DISEASE_IS_PLACEHOLDER=false`. Check that `TREE_POSITIVE_CLASS`, `TREE_DISPLAY_NAMES`, `LEAF_SEG_ENCODER` and
+   `LEAF_DISEASE_ENCODER` match the checkpoints, and that each model's thresholds reflect the training notebook's
+   validation-tuned values.
+3. `python -m scripts.check_env` must show all three models loading with no placeholder warning, and
    `python -m scripts.predict_cli --model tree_classification path\to\known.jpg` should give sensible answers.
-4. Restart the server, then refresh the samples: `python -m scripts.seed_samples --model tree_classification --force` (and
-   `--model leaf_segmentation --force`).
+4. Restart the server, then refresh the samples: `python -m scripts.seed_samples --model tree_classification --force`,
+   `--model leaf_segmentation --force` and `--model leaf_disease --force`.
 5. Rows made during the dummy era keep their `*_dummy_v0` version; filter or delete them
    (`WHERE model_version LIKE '%dummy%'`).
 
@@ -301,9 +319,10 @@ The generated schema is committed as `openapi.json`; the frontend builds its Typ
 |--------|------|---------|
 | GET | `/health` | Liveness: `{"status":"ok"}`, no DB or model checks. |
 | GET | `/health/ready` | DB ping and model status: 200, or 503 with the reason per component. |
-| GET | `/api/v1/models` | Every model with `status`, `is_placeholder`, classes (includes planned ones as unavailable). |
+| GET | `/api/v1/models` | Every model with `status`, `is_placeholder`, classes. |
 | POST | `/api/v1/tree/predict` | Model 1. Multipart: `image` (required), `latitude`, `longitude` (both or neither), `gps_accuracy_m`, `captured_at`, `source` (`upload`/`camera`). 201 + `Location`. |
 | POST | `/api/v1/leaf-segmentation/predict` | Model 2, same form. 201 + `Location`; `image.result_url` is the overlay PNG. |
+| POST | `/api/v1/leaf-disease/predict` | Model 3 (ADR 0019), same form. 201 + `Location`; `image.result_url` is the overlay PNG. |
 | GET | `/api/v1/analyses` | History. Query: `model_key`, `scope` (`mine` / `samples` / `all_visible`), `page`, `page_size` (max 100). Completed analyses only. |
 | GET | `/api/v1/analyses/{id}` | One analysis in full (yours or a sample, otherwise 404). |
 | GET | `/api/v1/analyses/{id}/image` | Query `variant` (`original`/`thumbnail`/`result`), `exp`, `sig`. No client id: the signed link is the credential; samples need none (ADR 0015). |
@@ -331,30 +350,33 @@ migrations up and down on `KeraAI_Test` (never on `KeraAI`). Fast tests never im
 
 Adding a model means a settings group, a details schema, a predictor class, a registry entry and a route. The service, storage,
 repository, table and history endpoints do not change; if you find yourself editing `analysis_service.py` for a
-model-specific reason, stop and discuss it. The worked example is Model 3, `leaf_disease` (its key already exists).
+model-specific reason, stop and discuss it. **Model 3 (`leaf_disease`) is a finished, real example of all five steps** (ADR
+0019) — read its files alongside this if you're adding a fourth model:
 
-1. **Settings group** (`app/core/config.py`): add `LeafDiseaseModelSettings(BaseModel)` (`enabled`, `weights_path`,
+1. **Settings group** (`app/core/config.py`): a `LeafDiseaseModelSettings(BaseModel)` (`enabled`, `weights_path`,
    `model_version`, `is_placeholder`, plus its own knobs), flat `leaf_disease_*` fields on `Settings` with defaults, and a
-   `leaf_disease` property returning the group, like `tree` and `leaf_seg`. Add the group to the return type of
-   `ModelSpec.settings_group` in `app/ml/registry.py` and the variables to `.env.example`.
+   `leaf_disease` property returning the group, like `tree` and `leaf_seg`. The group is in the return type of
+   `ModelSpec.settings_group` in `app/ml/registry.py` and the variables are in `.env.example`.
 2. **Details schema** (`app/schemas/leaf_disease.py`): `LeafDiseaseDetails` with `kind: Literal["leaf_disease"]` (required, no
-   default) and the model's real outputs only (D-06). Add it to the discriminated union `AnalysisDetails` in
+   default) and the model's real outputs only (D-06). It's in the discriminated union `AnalysisDetails` in
    `app/schemas/analysis.py`.
-3. **Predictor** (`app/ml/leaf_disease.py`): subclass `Predictor` (`app/ml/base.py`), set `key: ClassVar[str] = "leaf_disease"`,
-   call `super().__init__(display_name=..., version=..., task=..., is_placeholder=...)` from the settings, implement `load`
-   (import torch lazily; raise `ModelLoadError` with an actionable message), `preprocess`, `infer` and `postprocess`
-   (return `PredictionOutput`, optionally with a `result_image` overlay). `predict()` already adds the lock, timings and
+3. **Predictor** (`app/ml/leaf_disease_identifier.py` + the pure pre/post-processing package `app/ml/leaf_disease/`):
+   subclasses `Predictor` (`app/ml/base.py`), `key: ClassVar[str] = "leaf_disease"`, calls
+   `super().__init__(display_name=..., version=..., task=..., is_placeholder=...)` from the settings, implements `load`
+   (imports torch lazily; raises `ModelLoadError` with an actionable message), `preprocess`, `infer` and `postprocess`
+   (returns `PredictionOutput`, with a `result_image` overlay). `predict()` already adds the lock, timings and
    error wrapping. Never import torch at module top level (fast tests and degraded startup depend on it).
-4. **Registry** (`app/ml/registry.py`): add one `ModelSpec(key="leaf_disease", factory="app.ml.leaf_disease:LeafDiseaseClassifier",
-   display_name=..., task=..., settings_group=lambda s: s.leaf_disease)` to `MODEL_SPECS` and delete the planned
-   `leaf_disease` entry from `PLANNED_MODEL_INFOS`. `GET /models`, `/health/ready`, `scripts.check_env` and
-   `scripts.predict_cli` pick it up from there.
-5. **Route** (`app/api/v1/endpoints/leaf_disease.py`): copy `leaf_segmentation.py` (`APIRouter(route_class=UploadGuardRoute)`,
-   `POST /leaf-disease/predict` calling `run_predict(model_key="leaf_disease", ...)`) and add `include_router` in
-   `app/api/v1/router.py`. **Only if the key is new** (not in `MODEL_KEYS` yet): add it to `MODEL_KEYS`
-   (`app/db/models/analysis.py`) and to the `ModelKey` Literal (`app/schemas/common.py`; a unit test keeps both in step), then
-   write an Alembic migration (`alembic revision -m "allow <key>"`) that drops and recreates the `ck_analyses_model_key` CHECK
-   with the literal list of keys (a migration must not import app code).
+4. **Registry** (`app/ml/registry.py`): one `ModelSpec(key="leaf_disease",
+   factory="app.ml.leaf_disease_identifier:LeafDiseaseIdentifier", display_name=..., task=...,
+   settings_group=lambda s: s.leaf_disease)` in `MODEL_SPECS`. `GET /models`, `/health/ready`, `scripts.check_env` and
+   `scripts.predict_cli` pick it up from there with no further changes.
+5. **Route** (`app/api/v1/endpoints/leaf_disease.py`): copied from `leaf_segmentation.py`'s shape
+   (`APIRouter(route_class=UploadGuardRoute)`, `POST /leaf-disease/predict` calling
+   `run_predict(model_key="leaf_disease", ...)`), registered via `include_router` in `app/api/v1/router.py`. The `leaf_disease`
+   key already existed in `MODEL_KEYS` (`app/db/models/analysis.py`) and the `ModelKey` Literal (`app/schemas/common.py`)
+   before this model was built, so no migration was needed this time — a genuinely new key still needs an Alembic
+   migration (`alembic revision -m "allow <key>"`) that drops and recreates the `ck_analyses_model_key` CHECK with the
+   literal list of keys (a migration must not import app code).
 
 Finish with: tests using `FakePredictor("leaf_disease", ...)` from `tests/fakes.py`, `python -m scripts.export_openapi`,
 `samples/leaf_disease/` with a manifest, and an ADR for any non-obvious choice.
@@ -370,10 +392,16 @@ Finish with: tests using `FakePredictor("leaf_disease", ...)` from `tests/fakes.
   (open decision O-04).
 * **Ultralytics is AGPL-3.0.** Serving it publicly implies the source must be available to users. Whether the repository is
   open-sourced is the owner's decision (O-07), still pending.
-* **Model 2's "healthy" verdict is unvalidated:** it was trained on 50 images, only 2 of them healthy leaves, and its damage
-  threshold was tuned on the test split (ADR 0012).
-* **The weights in `weights/` are dummies** until you install the trained ones: every result is meaningless and flagged
-  `is_placeholder`.
+* **All three models are on real, trained weights** (`*_IS_PLACEHOLDER=false`). Model 1 (`tree_cls_real_v1`, 94.3% test
+  accuracy — see `experiment/01_tree_classification.ipynb`), Model 2 (`leaf_seg_real_v1`, affected-channel test Dice
+  0.68 at its validation-tuned threshold of 0.90, leaf-channel Dice 0.986 — see
+  `experiment/02_leaf_segmentation.ipynb`) and Model 3 (`leaf_disease_real_v1`, per-image diagnosis accuracy 96% (23/24
+  correct), leaf-channel Dice 0.955, black-Sigatoka Dice 0.49 and yellow-Sigatoka Dice 0.39 at their validation-tuned
+  thresholds of 0.85/0.55 — see `experiment/03_leaf_disease_segmentation.ipynb`). Models 2 and 3's disease/damage
+  channels are the hardest part of each pipeline: small, imbalanced lesions on under 200 training images (Model 3's
+  yellow Sigatoka class has only 7 examples). Read a "healthy" verdict as "no damage above the configured threshold
+  was found," not a clinical guarantee, and treat the per-channel coverage numbers as a useful signal rather than a
+  precise area measurement.
 * **Rate limiting** is per client IP and in memory (resets on restart); a signed image link works for whoever holds it until it
   expires (ADRs 0015, 0017).
 * **SQL Server** code paths are exercised against SQLite in the fast suite; the SQL Server behaviour (migrations up and down,

@@ -1,18 +1,20 @@
 """Create DUMMY (randomly initialised) weights so the whole stack can run end-to-end
 before the real trained checkpoints exist.
 
-    python -m scripts.make_dummy_weights [--model all|tree_classification|leaf_segmentation] [--force]
+    python -m scripts.make_dummy_weights [--model all|tree_classification|leaf_segmentation|leaf_disease] [--force]
 
 The predictions of these files are MEANINGLESS. They exist to prove the plumbing
 (load -> warm up -> predict -> save -> history -> UI), nothing more. Nothing is
-downloaded: both networks are built from their architecture definitions with
+downloaded: every network is built from its architecture definition with
 `torch.manual_seed(0)`, on CPU, with no pretrained weights.
 
 File formats are identical to the real thing, so a real file is a drop-in:
 - Model 1: a normal Ultralytics `.pt` zip (what `YOLO.save` / training writes),
   2 classes {0: banana_tree, 1: non_banana}, task=classify.
 - Model 2: a BARE `state_dict` saved with `torch.save` — exactly like the
-  training notebook's `banana_leaf_segmentation_best.pt`.
+  training notebook's `banana_leaf_segmentation_best.pt`, 2 output channels.
+- Model 3: same bare `state_dict` shape as Model 2, 3 output channels
+  (leaf, black_sigatoka, yellow_sigatoka), per ADR 0019.
 
 Existing files are never overwritten unless `--force` is given, so a real
 checkpoint cannot be clobbered by accident. This script does NOT edit `.env`.
@@ -40,6 +42,8 @@ ENV_LINES = (
     "TREE_IS_PLACEHOLDER=true",
     "LEAF_SEG_MODEL_VERSION=leaf_seg_dummy_v0",
     "LEAF_SEG_IS_PLACEHOLDER=true",
+    "LEAF_DISEASE_MODEL_VERSION=leaf_disease_dummy_v0",
+    "LEAF_DISEASE_IS_PLACEHOLDER=true",
 )
 
 
@@ -85,20 +89,23 @@ def make_tree_dummy(path: Path) -> None:
         raise RuntimeError("Verification failed: the reloaded model returned no 2-class output.")
 
 
-def make_leaf_seg_dummy(path: Path, encoder: str) -> None:
-    """U-Net (random init) saved as a bare state_dict, like the training notebook."""
+def make_unet_dummy(path: Path, encoder: str, n_classes: int) -> None:
+    """U-Net (random init) saved as a bare state_dict, like the training notebook.
+
+    Shared by Model 2 (2 classes: leaf, affected) and Model 3 (3 classes: leaf,
+    black_sigatoka, yellow_sigatoka) — same architecture family, only the head differs.
+    """
     import segmentation_models_pytorch as smp  # type: ignore[import-untyped]
     import torch
 
     def build() -> torch.nn.Module:
-        # encoder_weights=None -> nothing is downloaded. classes=2 (leaf, affected)
-        # and activation=None (raw logits; the app applies the sigmoid) mirror the
-        # notebook's model definition.
+        # encoder_weights=None -> nothing is downloaded. activation=None (raw logits;
+        # the app applies the sigmoid) mirrors the notebook's model definition.
         return smp.Unet(
             encoder_name=encoder,
             encoder_weights=None,
             in_channels=3,
-            classes=2,
+            classes=n_classes,
             activation=None,
         )
 
@@ -116,7 +123,7 @@ def make_leaf_seg_dummy(path: Path, encoder: str) -> None:
     check.eval()
     with torch.no_grad():
         out = check(torch.zeros(1, 3, 64, 64))
-    if tuple(out.shape) != (1, 2, 64, 64) or not zipfile.is_zipfile(path):
+    if tuple(out.shape) != (1, n_classes, 64, 64) or not zipfile.is_zipfile(path):
         raise RuntimeError(f"Verification failed: unexpected output shape {tuple(out.shape)}.")
 
 
@@ -150,7 +157,12 @@ def _targets(settings: Settings, selection: str) -> list[tuple[str, Path, Callab
         (
             "leaf_segmentation",
             leaf_path,
-            lambda path: make_leaf_seg_dummy(path, settings.leaf_seg.encoder),
+            lambda path: make_unet_dummy(path, settings.leaf_seg.encoder, n_classes=2),
+        ),
+        (
+            "leaf_disease",
+            resolve_weights_path(settings.leaf_disease.weights_path),
+            lambda path: make_unet_dummy(path, settings.leaf_disease.encoder, n_classes=3),
         ),
     ]
     return [item for item in available if selection in ("all", item[0])]
@@ -162,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--model",
-        choices=["all", "tree_classification", "leaf_segmentation"],
+        choices=["all", "tree_classification", "leaf_segmentation", "leaf_disease"],
         default="all",
         help="which dummy to create (default: all)",
     )

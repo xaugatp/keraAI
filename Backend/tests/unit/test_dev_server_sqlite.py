@@ -13,7 +13,13 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from scripts import dev_server_sqlite
-from scripts.dev_server_sqlite import DevServerError, build_dev_app, configure_environment
+from scripts.dev_server_sqlite import (
+    DevServerError,
+    build_dev_app,
+    configure_environment,
+    sample_model_keys,
+)
+from scripts.seed_samples import SAMPLES_ROOT, load_manifest
 from sqlalchemy import inspect, text
 
 from app.core.config import get_settings
@@ -21,6 +27,11 @@ from app.ml.registry import ModelRegistry
 from tests.fakes import FakePredictor
 
 CLIENT_ID = "7c3f1b0e-2a44-4f6e-9d3b-0d7f6a9b1c21"
+
+# Not hard-coded: the committed manifests (and which model keys even have one) change
+# independently of this test file (e.g. a new model, or placeholder photos swapped for
+# real ones, spec 13).
+TOTAL_COMMITTED_SAMPLES = sum(len(load_manifest(SAMPLES_ROOT / key)) for key in sample_model_keys())
 
 
 @pytest.fixture
@@ -143,7 +154,7 @@ class TestBuildDevApp:
                     params={"scope": "samples"},
                     headers={"X-Client-Id": CLIENT_ID},
                 ).json()
-            assert page["total"] == 2
+            assert page["total"] == TOTAL_COMMITTED_SAMPLES
         finally:
             second.engine.dispose()
 
@@ -189,7 +200,7 @@ class TestSeedAll:
         try:
             outcomes = dev_server_sqlite.seed_all(dev)
 
-            assert [o.model_key for o in outcomes] == ["leaf_segmentation", "tree_classification"]
+            assert [o.model_key for o in outcomes] == sample_model_keys()
             assert all(o.report is not None and o.report.ok for o in outcomes)
             with TestClient(dev.app) as client:
                 page = client.get(
@@ -197,7 +208,7 @@ class TestSeedAll:
                     params={"scope": "samples"},
                     headers={"X-Client-Id": CLIENT_ID},
                 ).json()
-                assert page["total"] == 2
+                assert page["total"] == TOTAL_COMMITTED_SAMPLES
                 for item in page["items"]:
                     assert item["is_sample"] is True
                     thumbnail = client.get(item["thumbnail_url"])
@@ -297,7 +308,7 @@ class TestRunAndMain:
         assert code == 0
         assert "Samples for tree_classification" in out
         assert "Samples for leaf_segmentation" in out
-        assert out.count("SEEDED") == 2
+        assert out.count("SEEDED") == TOTAL_COMMITTED_SAMPLES
         assert serve["kwargs"]["port"] == 8000
 
     def test_seed_problems_are_loud_but_the_server_still_starts(

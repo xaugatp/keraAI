@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ViewTab } from '../types';
 import { ASSETS } from '../data/mockData';
 import { CameraModal } from '../components/CameraModal';
+import { FutureScopeSection } from '../components/FutureScopeSection';
 import { ProcessingModal } from '../components/ProcessingModal';
 import type { ProcessingPhase } from '../components/ProcessingModal';
 import { useAnalysisState } from '../state/AnalysisContext';
@@ -587,6 +588,8 @@ export const DetectionWorkspaceView: React.FC<DetectionWorkspaceViewProps> = ({ 
           </button>
         </div>
       </div>
+
+      <FutureScopeSection />
     </div>
   );
 };

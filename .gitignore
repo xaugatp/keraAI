@@ -38,9 +38,20 @@ DATA_ROOT/
 Backend/data/
 Backend/.dev-data/
 
+# --- Raw ML training datasets (Roboflow exports; large, not ours to version) ---
+/Data/
+experiment/data_cache/
+experiment/stage1_work/
+experiment/stage2_work/
+experiment/stage3_work/
+experiment/outputs/
+experiment/figures/
+experiment/_ref_repo/
+
 # --- OS / editor ---
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
 *.log
+/runs/

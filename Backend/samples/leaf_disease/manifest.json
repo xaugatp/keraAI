@@ -1,0 +1,22 @@
+[
+  {
+    "file": "banana_leaf_closeup.jpg",
+    "title": "Banana leaf — full view",
+    "description": "The project's own reference leaf photo. Analysed by the real trained leaf_disease_real_v1 checkpoint (experiment/03_leaf_disease_segmentation.ipynb) — the measurements shown are genuine model output, though this is a single reference photo rather than a curated farm sample set."
+  },
+  {
+    "file": "banana_leaf_crop_upper.jpg",
+    "title": "Banana leaf — upper section crop",
+    "description": "A crop of the same source leaf photo, framed differently for UI variety. Analysed by the real leaf_disease_real_v1 checkpoint."
+  },
+  {
+    "file": "banana_leaf_crop_midrib.jpg",
+    "title": "Banana leaf — midrib crop",
+    "description": "A crop of the same source leaf photo, framed differently for UI variety. Analysed by the real leaf_disease_real_v1 checkpoint."
+  },
+  {
+    "file": "banana_leaf_crop_lower.jpg",
+    "title": "Banana leaf — lower section crop",
+    "description": "A crop of the same source leaf photo, framed differently for UI variety. Analysed by the real leaf_disease_real_v1 checkpoint."
+  }
+]

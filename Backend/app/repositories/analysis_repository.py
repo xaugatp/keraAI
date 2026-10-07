@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Final, Literal
 
-from sqlalchemy import ColumnElement, false, func, or_, select
+from sqlalchemy import ColumnElement, false, func, or_, select, true
 from sqlalchemy.orm import Session
 
 from app.db.models.analysis import Analysis
@@ -84,7 +84,7 @@ class AnalysisRepository:
     def get_sample_by_hash(self, model_key: str, sha256: str) -> Analysis | None:
         """Find an existing, non-deleted sample for this image — seed idempotency."""
         stmt = select(Analysis).where(
-            Analysis.is_sample.is_(True),
+            Analysis.is_sample == true(),
             Analysis.model_key == model_key,
             Analysis.image_sha256 == sha256,
             Analysis.deleted_at.is_(None),
@@ -104,7 +104,7 @@ class AnalysisRepository:
         # So an unknown caller must never reach an equality test: "mine" for nobody is
         # empty, and "all_visible" for nobody degrades to samples only.
         client_id = filters.client_id
-        is_sample = Analysis.is_sample.is_(True)
+        is_sample = Analysis.is_sample == true()
         if filters.scope == "samples":
             conditions.append(is_sample)
         elif filters.scope == "mine":

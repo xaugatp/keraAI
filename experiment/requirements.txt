@@ -1,0 +1,34 @@
+# KeraAI experiment notebooks — Python 3.11, CPU-only on this laptop (Intel Arc, no CUDA).
+# Install with:  python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt
+
+# --- deep learning core ---
+torch>=2.2
+torchvision>=0.17
+
+# --- model architectures ---
+ultralytics>=8.1          # YOLOv8-cls (Model 1)
+segmentation-models-pytorch>=0.3.3   # smp.Unet (Models 2 & 3) — matches the reference repo
+timm>=0.9                 # smp's encoder backend (resnet34 etc.)
+
+# --- data / augmentation ---
+albumentations>=1.4
+opencv-python>=4.9
+Pillow>=10.0
+numpy>=1.26,<2.0          # <2.0 for compatibility with albumentations/pycocotools-era pins
+pandas>=2.2
+
+# --- training utilities ---
+scikit-learn>=1.4         # GroupShuffleSplit, train_test_split, metrics
+thop>=0.1.1               # FLOPs profiling (matches reference repo's inference-speed section)
+tqdm>=4.66
+psutil>=5.9        # RAM/CPU detection for hardware-adaptive batch sizing
+
+# --- plotting ---
+matplotlib>=3.8
+seaborn>=0.13
+
+# --- notebook runtime ---
+jupyterlab>=4.0
+ipykernel>=6.29
+ipywidgets>=8.1
+nbformat>=5.10

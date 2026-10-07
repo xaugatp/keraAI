@@ -33,6 +33,11 @@ from app.db.base import Base  # noqa: E402
 from app.db.session import create_db_engine, create_session_factory  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.ml.registry import ModelRegistry  # noqa: E402
+from app.schemas.leaf_disease import (  # noqa: E402
+    DiseaseChannelMetrics,
+    LeafDiseaseDetails,
+    LeafDiseaseThresholds,
+)
 from app.schemas.leaf_seg import LeafSegDetails, LeafSegThresholds  # noqa: E402
 from tests.fakes import FakePredictor  # noqa: E402
 
@@ -95,6 +100,40 @@ def make_leaf_seg_details() -> LeafSegDetails:
     )
 
 
+def make_leaf_disease_details() -> LeafDiseaseDetails:
+    return LeafDiseaseDetails(
+        kind="leaf_disease",
+        diagnosis="black_sigatoka",
+        leaf_area_pct_of_image=58.0,
+        mean_leaf_probability=0.9,
+        diseases=[
+            DiseaseChannelMetrics(
+                channel="black_sigatoka",
+                area_pct_of_leaf=15.0,
+                lesion_count=2,
+                largest_lesion_pct_of_leaf=9.0,
+                mean_probability=0.82,
+            ),
+            DiseaseChannelMetrics(
+                channel="yellow_sigatoka",
+                area_pct_of_leaf=0.0,
+                lesion_count=0,
+                largest_lesion_pct_of_leaf=0.0,
+                mean_probability=None,
+            ),
+        ],
+        thresholds=LeafDiseaseThresholds(
+            leaf=0.5,
+            black_sigatoka=0.5,
+            yellow_sigatoka=0.5,
+            min_leaf_pct=3.0,
+            min_lesion_pct=0.05,
+            min_disease_pct=0.5,
+            tta_hflip=True,
+        ),
+    )
+
+
 def build_fake_tree() -> FakePredictor:
     return FakePredictor("tree_classification", version="tree_fake_v1")
 
@@ -114,6 +153,21 @@ def build_fake_leaf_seg() -> FakePredictor:
     )
 
 
+def build_fake_leaf_disease() -> FakePredictor:
+    # A segmentation model also produces an overlay image (stored as result.png).
+    return FakePredictor(
+        "leaf_disease",
+        version="leaf_disease_fake_v1",
+        task="segment",
+        details=make_leaf_disease_details(),
+        label="black_sigatoka",
+        display_label="Black Sigatoka detected",
+        confidence=None,
+        classes=["leaf", "black_sigatoka", "yellow_sigatoka"],
+        result_image=Image.new("RGB", (40, 30), (200, 150, 10)),
+    )
+
+
 @pytest.fixture
 def fake_tree() -> FakePredictor:
     return build_fake_tree()
@@ -125,8 +179,15 @@ def fake_leaf_seg() -> FakePredictor:
 
 
 @pytest.fixture
-def fake_registry(fake_tree: FakePredictor, fake_leaf_seg: FakePredictor) -> ModelRegistry:
-    return ModelRegistry.from_predictors([fake_tree, fake_leaf_seg])
+def fake_leaf_disease() -> FakePredictor:
+    return build_fake_leaf_disease()
+
+
+@pytest.fixture
+def fake_registry(
+    fake_tree: FakePredictor, fake_leaf_seg: FakePredictor, fake_leaf_disease: FakePredictor
+) -> ModelRegistry:
+    return ModelRegistry.from_predictors([fake_tree, fake_leaf_seg, fake_leaf_disease])
 
 
 @pytest.fixture(autouse=True)

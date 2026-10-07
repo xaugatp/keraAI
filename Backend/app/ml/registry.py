@@ -19,7 +19,12 @@ from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass
 from typing import cast
 
-from app.core.config import LeafSegModelSettings, Settings, TreeModelSettings
+from app.core.config import (
+    LeafDiseaseModelSettings,
+    LeafSegModelSettings,
+    Settings,
+    TreeModelSettings,
+)
 from app.core.errors import ModelUnavailableError
 from app.ml.base import ModelInfo, ModelLoadError, Predictor
 
@@ -36,7 +41,9 @@ class ModelSpec:
     # error): a built predictor reports its own display name / task / version.
     display_name: str
     task: str
-    settings_group: Callable[[Settings], TreeModelSettings | LeafSegModelSettings]
+    settings_group: Callable[
+        [Settings], TreeModelSettings | LeafSegModelSettings | LeafDiseaseModelSettings
+    ]
 
     def enabled(self, settings: Settings) -> bool:
         return self.settings_group(settings).enabled
@@ -58,22 +65,19 @@ MODEL_SPECS: tuple[ModelSpec, ...] = (
         task="segment",
         settings_group=lambda s: s.leaf_seg,
     ),
-)
-
-# Shown by GET /models as "coming soon". It has no predictor and no settings:
-# it exists only so the UI can list what is planned (CLAUDE.md model table).
-PLANNED_MODEL_INFOS: tuple[ModelInfo, ...] = (
-    ModelInfo(
+    ModelSpec(
         key="leaf_disease",
-        display_name="Leaf disease detection",
-        version="n/a",
-        task="n/a",
-        classes=[],
-        status="unavailable",
-        reason="Planned — not built yet",
-        is_placeholder=False,
+        factory="app.ml.leaf_disease_identifier:LeafDiseaseIdentifier",
+        display_name="Leaf disease identification",
+        task="segment",
+        settings_group=lambda s: s.leaf_disease,
     ),
 )
+
+# Shown by GET /models as "coming soon". Nothing is planned anymore (all three
+# CLAUDE.md models have a predictor + settings), so this stays empty on purpose
+# rather than being deleted: it's where a genuinely new, unbuilt model would go.
+PLANNED_MODEL_INFOS: tuple[ModelInfo, ...] = ()
 
 
 # --- reasons shown to clients -----------------------------------------------

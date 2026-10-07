@@ -1,22 +1,22 @@
 [
   {
-    "file": "banana_leaf_closeup.jpg",
-    "title": "Banana leaf — full view (development placeholder)",
-    "description": "Development placeholder, to be replaced by the owner's real sample photos (ideally whole-tree shots for this model). This is a close-up of a banana leaf, not a whole tree. While dummy (randomly initialised) weights are installed, the result shown for it is not a real prediction."
+    "file": "banana_tree_01.jpg",
+    "title": "Banana tree — field photo",
+    "description": "From the Roboflow banana-tree-detection test set. The real tree_cls_real_v1 classifier scores this 99.4% banana tree."
   },
   {
-    "file": "banana_leaf_crop_upper.jpg",
-    "title": "Banana leaf — upper section crop (placeholder)",
-    "description": "Development placeholder: a crop of the same source leaf photo, framed differently for UI variety. Not a whole tree. Dummy weights — the result shown is not a real prediction."
+    "file": "banana_tree_02.jpg",
+    "title": "Banana tree — close range",
+    "description": "From the Roboflow banana-tree-detection test set. The real tree_cls_real_v1 classifier scores this 98.2% banana tree."
   },
   {
-    "file": "banana_leaf_crop_midrib.jpg",
-    "title": "Banana leaf — midrib crop (placeholder)",
-    "description": "Development placeholder: a crop of the same source leaf photo, framed differently for UI variety. Not a whole tree. Dummy weights — the result shown is not a real prediction."
+    "file": "non_banana_tree_01.jpg",
+    "title": "Non-banana vegetation",
+    "description": "From the Roboflow banana-tree-detection test set. The real tree_cls_real_v1 classifier scores this 99.9% not a banana tree."
   },
   {
-    "file": "banana_leaf_crop_lower.jpg",
-    "title": "Banana leaf — lower section crop (placeholder)",
-    "description": "Development placeholder: a crop of the same source leaf photo, framed differently for UI variety. Not a whole tree. Dummy weights — the result shown is not a real prediction."
+    "file": "non_banana_tree_02.jpg",
+    "title": "Non-banana vegetation — mixed background",
+    "description": "From the Roboflow banana-tree-detection test set. The real tree_cls_real_v1 classifier scores this 86.7% not a banana tree."
   }
 ]

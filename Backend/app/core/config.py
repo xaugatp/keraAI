@@ -52,6 +52,28 @@ class LeafSegModelSettings(BaseModel):
     is_placeholder: bool = False
 
 
+class LeafDiseaseModelSettings(BaseModel):
+    """Model 3 (leaf disease identification: healthy vs Black/Yellow Sigatoka), ADR 0019.
+
+    Same shape as LeafSegModelSettings (Unet + resnet34, 512px, ImageNet normalisation) with
+    one extra disease channel and a per-disease threshold instead of a single affected one.
+    """
+
+    enabled: bool
+    weights_path: str
+    model_version: str
+    encoder: str
+    imgsz: int
+    leaf_threshold: float
+    black_sigatoka_threshold: float
+    yellow_sigatoka_threshold: float
+    tta_hflip: bool
+    min_leaf_pct: float  # leaf share of the image below which we say "no leaf"
+    min_lesion_pct: float  # drop lesion blobs smaller than this % of leaf area
+    min_disease_pct: float  # a disease's % of leaf below which it is ignored
+    is_placeholder: bool = False
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -121,14 +143,29 @@ class Settings(BaseSettings):
     # U-Net halves the resolution five times, so the side must divide by 32.
     leaf_seg_imgsz: int = Field(default=512, ge=64, multiple_of=32)
     leaf_seg_leaf_threshold: float = Field(default=0.50, gt=0, lt=1)
-    # 0.85 is the notebook's tuned value (tuned on its test split, so treat it
-    # as optimistic and re-tune on a validation split when retraining).
-    leaf_seg_affected_threshold: float = Field(default=0.85, gt=0, lt=1)
+    # 0.90 is leaf_seg_real_v1's validation-tuned value (see ADR 0012's "Update" note).
+    leaf_seg_affected_threshold: float = Field(default=0.90, gt=0, lt=1)
     leaf_seg_tta_hflip: bool = True
     leaf_seg_min_leaf_pct: float = Field(default=3.0, ge=0, le=100)
     leaf_seg_min_lesion_pct: float = Field(default=0.05, ge=0, le=100)
     leaf_seg_min_affected_pct: float = Field(default=0.5, ge=0, le=100)
     leaf_seg_is_placeholder: bool = False
+
+    # --- model 3: leaf disease identification ---
+    leaf_disease_enabled: bool = True
+    leaf_disease_weights_path: str = "weights/leaf_disease_v1.pt"
+    leaf_disease_model_version: str = "leaf_disease_v1"
+    leaf_disease_encoder: str = "resnet34"
+    leaf_disease_imgsz: int = Field(default=512, ge=64, multiple_of=32)
+    leaf_disease_leaf_threshold: float = Field(default=0.50, gt=0, lt=1)
+    # leaf_disease_real_v1's validation-tuned values (see ADR 0019's "Update" note).
+    leaf_disease_black_sigatoka_threshold: float = Field(default=0.85, gt=0, lt=1)
+    leaf_disease_yellow_sigatoka_threshold: float = Field(default=0.55, gt=0, lt=1)
+    leaf_disease_tta_hflip: bool = True
+    leaf_disease_min_leaf_pct: float = Field(default=3.0, ge=0, le=100)
+    leaf_disease_min_lesion_pct: float = Field(default=0.05, ge=0, le=100)
+    leaf_disease_min_disease_pct: float = Field(default=0.5, ge=0, le=100)
+    leaf_disease_is_placeholder: bool = False
 
     @field_validator("db_port", mode="before")
     @classmethod
@@ -185,6 +222,24 @@ class Settings(BaseSettings):
             min_lesion_pct=self.leaf_seg_min_lesion_pct,
             min_affected_pct=self.leaf_seg_min_affected_pct,
             is_placeholder=self.leaf_seg_is_placeholder,
+        )
+
+    @property
+    def leaf_disease(self) -> LeafDiseaseModelSettings:
+        return LeafDiseaseModelSettings(
+            enabled=self.leaf_disease_enabled,
+            weights_path=self.leaf_disease_weights_path,
+            model_version=self.leaf_disease_model_version,
+            encoder=self.leaf_disease_encoder,
+            imgsz=self.leaf_disease_imgsz,
+            leaf_threshold=self.leaf_disease_leaf_threshold,
+            black_sigatoka_threshold=self.leaf_disease_black_sigatoka_threshold,
+            yellow_sigatoka_threshold=self.leaf_disease_yellow_sigatoka_threshold,
+            tta_hflip=self.leaf_disease_tta_hflip,
+            min_leaf_pct=self.leaf_disease_min_leaf_pct,
+            min_lesion_pct=self.leaf_disease_min_lesion_pct,
+            min_disease_pct=self.leaf_disease_min_disease_pct,
+            is_placeholder=self.leaf_disease_is_placeholder,
         )
 
 

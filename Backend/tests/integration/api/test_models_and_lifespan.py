@@ -27,9 +27,7 @@ from tests.integration.api.helpers import (
 MODELS_URL = f"{PREFIX}/models"
 
 
-def test_models_lists_every_model_with_is_placeholder_and_the_planned_one(
-    api: TestClient,
-) -> None:
+def test_models_lists_every_model_with_is_placeholder(api: TestClient) -> None:
     response = api.get(MODELS_URL)  # no X-Client-Id needed
 
     assert response.status_code == 200
@@ -52,10 +50,10 @@ def test_models_lists_every_model_with_is_placeholder_and_the_planned_one(
     assert tree["classes"] == ["banana_tree", "non_banana"]
     assert tree["is_placeholder"] is False
 
-    planned = models["leaf_disease"]  # planned, not built: shown as unavailable
-    assert planned["status"] == "unavailable"
-    assert planned["is_placeholder"] is False
-    assert planned["reason"]
+    leaf_disease = models["leaf_disease"]  # built (ADR 0019), served by the default fake registry
+    assert leaf_disease["status"] == "ready" and leaf_disease["reason"] is None
+    assert leaf_disease["version"] == "leaf_disease_fake_v1"
+    assert leaf_disease["classes"] == ["leaf", "black_sigatoka", "yellow_sigatoka"]
 
 
 def test_models_reports_placeholder_weights(make_client: MakeClient) -> None:
