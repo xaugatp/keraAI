@@ -1,22 +1,22 @@
 [
   {
-    "file": "banana_leaf_closeup.jpg",
-    "title": "Banana leaf — full view",
-    "description": "The project's own reference leaf photo. Analysed by the real trained leaf_seg_real_v1 checkpoint (experiment/02_leaf_segmentation.ipynb) — the measurements shown are genuine model output, though this is a single reference photo rather than a curated farm sample set."
+    "file": "black_sigatoka_severe.jpg",
+    "title": "Black Sigatoka — heavy damage",
+    "description": "A held-out test-set photo (never used to train leaf_seg_real_v1) showing extensive Black Sigatoka lesions. Real model output."
   },
   {
-    "file": "banana_leaf_crop_upper.jpg",
-    "title": "Banana leaf — upper section crop",
-    "description": "A crop of the same source leaf photo, framed differently for UI variety. Analysed by the real leaf_seg_real_v1 checkpoint."
+    "file": "black_sigatoka_moderate.jpg",
+    "title": "Black Sigatoka — moderate damage",
+    "description": "A held-out test-set photo with a smaller affected area, for contrast with the severe case. Real model output."
   },
   {
-    "file": "banana_leaf_crop_midrib.jpg",
-    "title": "Banana leaf — midrib crop",
-    "description": "A crop of the same source leaf photo, framed differently for UI variety. Analysed by the real leaf_seg_real_v1 checkpoint."
+    "file": "healthy_leaf_1.jpg",
+    "title": "Healthy leaf",
+    "description": "A held-out test-set photo of a healthy leaf with no visible disease. Real model output."
   },
   {
-    "file": "banana_leaf_crop_lower.jpg",
-    "title": "Banana leaf — lower section crop",
-    "description": "A crop of the same source leaf photo, framed differently for UI variety. Analysed by the real leaf_seg_real_v1 checkpoint."
+    "file": "healthy_leaf_2.jpg",
+    "title": "Healthy leaf — second example",
+    "description": "A second held-out healthy leaf, for variety. Real model output."
   }
 ]

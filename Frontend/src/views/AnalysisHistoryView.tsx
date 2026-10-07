@@ -29,6 +29,18 @@ const MODEL_TABS: { id: ModelKey | 'all'; label: string }[] = [
 // LeafDiseaseView workspaces).
 const VIEWABLE_MODELS = new Set<ModelKey>(['tree_classification', 'leaf_segmentation', 'leaf_disease']);
 
+const MODEL_BADGE: Record<ModelKey, string> = {
+  tree_classification: 'Model 1 · Tree',
+  leaf_segmentation: 'Model 2 · Leaf',
+  leaf_disease: 'Model 3 · Disease',
+};
+
+const MODEL_SHORT_LABEL: Record<ModelKey, string> = {
+  tree_classification: 'Tree',
+  leaf_segmentation: 'Leaf',
+  leaf_disease: 'Disease',
+};
+
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
     year: 'numeric',
@@ -338,7 +350,7 @@ export const AnalysisHistoryView: React.FC<AnalysisHistoryViewProps> = ({ onNavi
                       <span className="font-mono text-xs font-bold text-[#131b2e]">{fmtConfidence(item.confidence)}</span>
                     </div>
                     <span className="font-mono text-[10px] uppercase tracking-wide text-[#006948] font-bold">
-                      {item.model_key === 'leaf_segmentation' ? 'Model 2 · Leaf' : 'Model 1 · Tree'}
+                      {MODEL_BADGE[item.model_key]}
                       {item.is_sample && ' · Sample'}
                     </span>
                     <h3 className="text-sm font-extrabold text-[#131b2e] truncate mt-0.5">
@@ -409,7 +421,7 @@ export const AnalysisHistoryView: React.FC<AnalysisHistoryViewProps> = ({ onNavi
                       </td>
                       <td className="py-3 px-4 font-mono text-xs text-[#3d4a42]">{fmtDate(item.created_at)}</td>
                       <td className="py-3 px-4 font-mono text-xs font-bold text-[#006948]">
-                        {item.model_key === 'leaf_segmentation' ? 'Leaf' : 'Tree'}
+                        {MODEL_SHORT_LABEL[item.model_key]}
                         {item.is_sample && ' (sample)'}
                       </td>
                       <td className="py-3 px-4 font-bold text-[#131b2e]">{item.title ?? item.display_label}</td>
